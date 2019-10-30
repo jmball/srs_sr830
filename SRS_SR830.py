@@ -20,6 +20,13 @@ class SRS_SR830():
     
     ratio_ch2 = ['none', 'Aux in 3', 'Aux in 4']
 
+    sample_rates = [62.5e-3, 125e-3, 250e-3, 500e-3, 1, 2, 4, 8, 16,
+    32, 64, 128, 256, 512, 'Trigger']
+
+    end_of_buffer_modes = ['1 Shot', 'Loop']
+
+    trigger_start_modes = ['Off', 'Start scan']
+
     def __init__(self, addr, timeout=10000):
         rm = visa.ResourceManager()
         self.instr = rm.open_resource(addr)
@@ -847,4 +854,262 @@ class SRS_SR830():
         """Automatically set phase"""
         self.instr.write(f'APHS')
         TODO: add query phase shift to determine completion
+
+
+    def set_sample_rate(self, rate):
+        """Set the data sample rate.
+        
+        value   sample rate (Hz)
+        0       62.5e-3
+        1       125e-3
+        2       250e-3
+        3       500e-3
+        4       1
+        5       2
+        6       4
+        7       8
+        8       16
+        8       32
+        10      64
+        11      128
+        12      256
+        13      512
+        14      Trigger
+
+
+        Paramters
+        ---------
+        rate : int
+            sample rate in Hz: see table above for mapping
+        """
+        self.instr.write(f'SRAT {rate}')
     
+
+    def get_sample_rate(self):
+        """Get the data sample rate.
+
+        value   sample rate (Hz)
+        0       62.5e-3
+        1       125e-3
+        2       250e-3
+        3       500e-3
+        4       1
+        5       2
+        6       4
+        7       8
+        8       16
+        8       32
+        10      64
+        11      128
+        12      256
+        13      512
+        14      Trigger
+
+        Returns
+        ---------
+        rate : float or str
+            sample rate in Hz: see table above for mapping
+        """
+        return sample_rates[int(self.instr.query(f'SRAT?'))]]
+
+
+    def set_end_of_buffer_mode(self, mode):
+        """Set the end of buffer mode. If Loop mode is used, make 
+        sure to pause data storage before reading the data to avoid
+        confusion about which point is the most recent.
+
+        Parameters
+        ----------
+        mode : int
+            end of buffer mode: 0 = 1 Shot, 1 = Loop
+        """
+        self.instr.write(f'SEND {mode}')
+
+    
+    def get_end_of_buffer_mode(self):
+        """Get the end of buffer mode.
+
+        Returns
+        ----------
+        mode : int
+            end of buffer mode: 0 = 1 Shot, 1 = Loop
+        """
+        return end_of_buffer_modes[int(self.instr.query(f'SEND?'))]
+    
+
+    def trigger(self):
+        """Send software trigger."""
+        self.instr.write(f'TRIG')
+
+
+    def set_trigger_start_mode(self, mode):
+        """Set the trigger start mode.
+
+        Parameters
+        ----------
+        mode : int
+            trigger start mode: 0 = Off, 1 = Start scan
+        """
+        self.instr.write(f'TSTR {mode}')
+
+    
+    def get_trigger_start_mode(self):
+        """Get the trigger start mode.
+
+        Returns
+        -------
+        mode : int
+            trigger start mode: 0 = Off, 1 = Start scan
+        """
+        return trigger_start_modes[int(self.instr.query(f'TSTR?'))]
+
+
+    def start(self):
+        """Start or resume data storage. Ignored if storage already in
+        progress."""
+        self.instr.write(f'STRT')
+
+    
+    def pause(self):
+        """Pause data storage. Ignored if storage is already paused
+        or reset."""
+        self.instr.write(f'PAUS')
+
+
+    def reset(self):
+        """Reset data buffers. This command will erase the data buffer."""
+        self.instr.write(f'REST')
+
+    
+    def measure(self, parameter):
+        """Read the value of X, Y, R, or phase.
+
+        Parameters
+        ----------
+        parameter : int
+            measured parameter: 1 = X, 2 = Y, 3 = R, 4 = phase
+        
+        Returns
+        -------
+        value : float
+            value of measured parameter
+        """
+        return float(self.instr.query(f'OUTP? {parameter}'))
+
+    
+    def read_display(self, channel):
+        """Read the value of a channel display.
+
+        Parameters
+        ----------
+        channel : int
+            channel display to read
+
+        Returns
+        -------
+        value : float
+            displayed value in display units
+        """
+        return float(self.instr.query(f'OUTR? {channel}'))
+
+    
+    def measure_multiple(self, parameters):
+        """Read multiple (2-6) parameter values simultaneously.
+
+        The values of X and Y are recorded at a single instant.
+        The values of R and phase are also recorded at a single
+        instant. Thus reading X,Y OR R,phase yields a coherent snapshot
+        of the output signal. If X,Y,R and phase are all read, then the
+        values of X,Y are recorded approximately 10µs apart from
+        R,phase. Thus, the values of X and Y may not yield the exact
+        values of R and phase from a single SNAP? query.
+
+        The values of the Aux Inputs may have an uncertainty of up to
+        32µs. The frequency is computed only every other period or 40 ms,
+        whichever is longer. 
+
+        value   parameter
+        1       X
+        2       Y
+        3       R
+        4       phase
+        5       Aux in 1
+        6       Aux in 2
+        7       Aux in 3
+        8       Aux in 4
+        9       Ref frequency
+        10      CH1 display
+        11      CH2 display
+
+        Paramters
+        ---------
+        paramters : list or tuple of int
+            parameters to measure: see table above
+        
+        Returns
+        -------
+        values : tuple of float
+            values of measured parameters
+        """
+        parameters = ','.join([str(i) for i in parameters])
+        values = self.instr.query(f'SNAP? {parameters}').split(',')
+        return (float(i) for i in values)
+
+    
+    def read_aux_in(self, aux_in):
+        """Read an auxiliary input value in volts.
+
+        Parameters
+        ----------
+        aux_in : int
+            auxiliary input
+
+        Returns
+        -------
+        voltage : float
+            auxiliary input voltage
+        """
+        return float(self.instr.query(f'OAUX? {aux_in}'))
+
+
+    def get_buffer_size(self):
+        """Get the number of points stored in the buffer.
+
+        Returns
+        -------
+        N : int
+            number of points in the buffer
+        """
+        return int(self.instr.query(f'SPTS?'))
+
+    
+    def get_buffer_data(self, channel, start_bin, bins):
+        """Get the points stored in a channel buffer range.
+
+        Bins (or points) a labelled from 0 (oldest) to N-1 (newest)
+        where N is the total number of bins.
+
+        If data storage is set to Loop mode, make sure that
+        storage is paused before reading any data. This is because
+        the points are indexed relative to the most recent point
+        which is continually changing.
+
+        Parameters
+        ----------
+        channel : int
+            channel 1 or 2
+        start_bin : int
+            starting bin to read where 0 is oldest
+        bins : int
+            number of bins to read
+        
+        Returns
+        -------
+        buffer : tuple of float
+            data stored in buffer range
+        """
+        buffer = self.instr.query(f'TRCA? {channel},{start_bin},{bins}').split(',')
+        return (float(i) for i in buffer)
+
+
+        
