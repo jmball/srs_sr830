@@ -27,6 +27,13 @@ class SRS_SR830():
 
     trigger_start_modes = ['Off', 'Start scan']
 
+    data_transfer_modes = ['Off', 'On (DOS)', 'On (Windows)']
+
+    local_modes = ['Local', 'Remote', 'Local lockout']
+
+    gpib_overide_remote_conditions = ['No', 'Yes']
+
+
     def __init__(self, addr, timeout=10000):
         rm = visa.ResourceManager()
         self.instr = rm.open_resource(addr)
@@ -1083,8 +1090,11 @@ class SRS_SR830():
         return int(self.instr.query(f'SPTS?'))
 
     
-    def get_buffer_data(self, channel, start_bin, bins):
+    def get_ascii_buffer_data(self, channel, start_bin, bins):
         """Get the points stored in a channel buffer range.
+
+        The values are returned as ASCII floating point numbers with
+        the units of the trace.
 
         Bins (or points) a labelled from 0 (oldest) to N-1 (newest)
         where N is the total number of bins.
@@ -1112,4 +1122,163 @@ class SRS_SR830():
         return (float(i) for i in buffer)
 
 
+    def get_binary_buffer_data(self, channel, start_bin, bins):
+        """Get the points stored in a channel buffer range.
+
+        The values are returned as IEEE format binary floating point
+        numbers with the units of the trace.
+
+        Bins (or points) a labelled from 0 (oldest) to N-1 (newest)
+        where N is the total number of bins.
+
+        If data storage is set to Loop mode, make sure that
+        storage is paused before reading any data. This is because
+        the points are indexed relative to the most recent point
+        which is continually changing.
+
+        Parameters
+        ----------
+        channel : int
+            channel 1 or 2
+        start_bin : int
+            starting bin to read where 0 is oldest
+        bins : int
+            number of bins to read
+        
+        Returns
+        -------
+        buffer : tuple of float
+            data stored in buffer range
+        """
+        TODO: fix formatting
+        buffer = self.instr.query(f'TRCB? {channel},{start_bin},{bins}').split(',')
+        pass
+
+
+    def get_non_norm_buffer_data(self, channel, start_bin, bins):
+        """Get the points stored in a channel buffer range.
+
+        The values are returned as non-normalised floating point
+        numbers with the units of the trace.
+
+        Bins (or points) a labelled from 0 (oldest) to N-1 (newest)
+        where N is the total number of bins.
+
+        If data storage is set to Loop mode, make sure that
+        storage is paused before reading any data. This is because
+        the points are indexed relative to the most recent point
+        which is continually changing.
+
+        Parameters
+        ----------
+        channel : int
+            channel 1 or 2
+        start_bin : int
+            starting bin to read where 0 is oldest
+        bins : int
+            number of bins to read
+        
+        Returns
+        -------
+        buffer : tuple of float
+            data stored in buffer range
+        """
+        TODO: fix formatting
+        buffer = self.instr.query(f'TRCL? {channel},{start_bin},{bins}').split(',')
+        pass
+
+
+    def set_data_transfer_mode(self, mode):
+        """Get the data transfer mode.
+        
+        Parameters
+        ----------
+        mode : str
+            0 = Off, 1 = On (DOS), 2 = On (Windows)
+        """
+        self.instr.write(f'FAST {mode}')
+
+
+    def get_data_transfer_mode(self):
+        """Get the data transfer mode.
+        
+        Returns
+        -------
+        mode : str
+            0 = Off, 1 = On (DOS), 2 = On (Windows)
+        """
+        return data_transfer_modes[int(self.instr.query(f'FAST?'))]
+
+
+    def start_scan(self):
+        """After turning on fast data transfer, this function starts
+        the scan after a delay of 0.5 sec. This delay allows the
+        controlling interface to place itself in the read mode before
+        the first data points are transmitted. Do not use the STRT
+        command to start the scan.
+        """
+        self.instr.write(f'STRD')
+
+    
+    def reset(self):
+        """Reset the instrument to the default configuration."""
+        self.instr.write(f'*RST')
+
+    
+    def get_idn(self):
+        """Get the identity string."""
+        self.instr.write(f'*IDN?')
+
+    
+    def set_local_mode(self, local):
+        """Set the local/remote function.
+        
+        Parameters
+        ----------
+        local : int
+            0 = Local, 1 = Remote, 2 = Local lockout
+        """
+        self.instr.write(f'LOCL {local}')
+    
+
+    def get_local_mode(self):
+        """Get the local/remote function.
+
+        Returns
+        -------
+        local : int
+            0 = Local, 1 = Remote, 2 = Local lockout
+        """
+        return local_modes[int(self.instr.query('LOCL?'))]
+    
+
+    def set_gpib_overide_remote(self, condition):
+        """Set the GPIB overide remote condition.
+
+        Parameters
+        ----------
+        condition : int
+            GPIB overide remote condition: 0 = No, 1 = Yes
+        """
+        self.instr.write(f'OVRM {condition}')
+
+
+    def get_gpib_overide_remote(self):
+        """Get the GPIB overide remote condition.
+
+        Returns
+        -------
+        condition : int
+            GPIB overide remote condition: 0 = No, 1 = Yes
+        """
+        return gpib_overide_remote_conditions[int(self.instr.write(f'OVRM?'))]
+    
+
+    def clear_status_registers(self):
+        """Clear all status registers."""
+        self.instr.write('*CLS')
+
+    
+    
+        
         
