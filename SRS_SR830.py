@@ -96,6 +96,7 @@ class SRS_SR830:
     gpib_overide_remote_conditions = ("No", "Yes")
 
     def __init__(self, addr, timeout=10000):
+        """Open VISA resource for instr."""
         rm = visa.ResourceManager()
         self.instr = rm.open_resource(addr)
         self.instr.timeout = timeout
@@ -747,8 +748,9 @@ class SRS_SR830:
         return float(self.instr.query(f"AUXV? {output}"))
 
     def set_output_interface(self, interface):
-        """Set the output communication interface. This command
-        should be sent before any query commands to direct the
+        """Set the output communication interface.
+        
+        This command should be sent before any query commands to direct the
         responses to the interface in use.
 
         Parameters
@@ -775,9 +777,10 @@ class SRS_SR830:
             raise ValueError(f"Unknown communication interface, {interface}")
 
     def set_remote_status(self, status):
-        """Set the remote status. Under normal operation every GPIB command 
-        puts the instrument in the remote state with the front panel
-        deactivated.
+        """Set the remote status.
+        
+        Under normal operation every GPIB command puts the instrument in the remote
+        state with the front panel deactivated.
 
         Parameters
         ----------
@@ -859,17 +862,17 @@ class SRS_SR830:
         self.instr.write(f"RSET {number}")
 
     def auto_gain(self):
-        """Automatically set gain"""
+        """Automatically set gain."""
         self.instr.write(f"AGAN")
         # TODO: add read serial poll byte
 
     def auto_reserve(self):
-        """Automatically set reserve"""
+        """Automatically set reserve."""
         self.instr.write(f"APHS")
         # TODO: add read serial poll byte
 
     def auto_phase(self):
-        """Automatically set phase"""
+        """Automatically set phase."""
         self.instr.write(f"APHS")
         # TODO: add query phase shift to determine completion
 
@@ -929,9 +932,10 @@ class SRS_SR830:
         return self.sample_rates[int(self.instr.query(f"SRAT?"))]
 
     def set_end_of_buffer_mode(self, mode):
-        """Set the end of buffer mode. If Loop mode is used, make 
-        sure to pause data storage before reading the data to avoid
-        confusion about which point is the most recent.
+        """Set the end of buffer mode.
+        
+        If Loop mode is used, make sure to pause data storage before reading the
+        data to avoid confusion about which point is the most recent.
 
         Parameters
         ----------
@@ -975,17 +979,24 @@ class SRS_SR830:
         return self.trigger_start_modes[int(self.instr.query(f"TSTR?"))]
 
     def start(self):
-        """Start or resume data storage. Ignored if storage already in
-        progress."""
+        """Start or resume data storage.
+        
+        Ignored if storage already in progress.
+        """
         self.instr.write(f"STRT")
 
     def pause(self):
-        """Pause data storage. Ignored if storage is already paused
-        or reset."""
+        """Pause data storage.
+        
+        Ignored if storage is already paused or reset.
+        """
         self.instr.write(f"PAUS")
 
     def reset_data_buffers(self):
-        """Reset data buffers. This command will erase the data buffer."""
+        """Reset data buffers.
+        
+        This command will erase the data buffer.
+        """
         self.instr.write(f"REST")
 
     def measure(self, parameter):
@@ -1201,7 +1212,9 @@ class SRS_SR830:
         return self.data_transfer_modes[int(self.instr.query(f"FAST?"))]
 
     def start_scan(self):
-        """After turning on fast data transfer, this function starts
+        """Start scan.
+        
+        After turning on fast data transfer, this function starts
         the scan after a delay of 0.5 sec. This delay allows the
         controlling interface to place itself in the read mode before
         the first data points are transmitted. Do not use the STRT
