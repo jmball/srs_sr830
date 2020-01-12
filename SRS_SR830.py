@@ -1,4 +1,6 @@
 """Stanford Research Systems SR830 lock-in amplifier (LIA) control library."""
+import logging
+import sys
 
 import visa
 
@@ -1295,4 +1297,16 @@ class sr830:
     def clear_status_registers(self):
         """Clear all status registers."""
         self.instr.write("*CLS")
+
+
+if __name__ == "__main__":
+    console_handler = logging.StreamHandler(sys.stdout)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s|%(name)s|%(levelname)s|%(message)s",
+        handlers=[console_handler],
+    )
+    logger = logging.getLogger()
+else:
+    logger = logging.getLogger(__name__)
 
