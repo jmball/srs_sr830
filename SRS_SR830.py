@@ -101,6 +101,8 @@ class sr830:
         self.instr = rm.open_resource(addr)
         self.instr.timeout = timeout
 
+    # --- Reference and phase commands ---
+
     def set_ref_phase_shift(self, phase_shift):
         """Set the reference phase shift.
 
@@ -347,6 +349,8 @@ class sr830:
         else:
             raise ValueError(f"Unknown input line notch filter status, {status}")
 
+    # --- Gain and time constant commands ---
+
     def set_sensitivity(self, sensitivity):
         """Set sensitivity.
 
@@ -573,6 +577,8 @@ class sr830:
         else:
             raise ValueError(f"Unknown synchronous filter status, {status}")
 
+    # --- Display and output commands ---
+
     def set_display(self, channel, display=1, ratio=0):
         """Set a channel display configuration.
 
@@ -710,6 +716,8 @@ class sr830:
         """
         self.instr.write(f"AOFF {parameter}")
 
+    # --- Aux input and output commands ---
+
     def get_aux_in(self, input):
         """Get voltage of auxiliary input.
 
@@ -746,6 +754,8 @@ class sr830:
             output voltage, -10.500 =< voltage =< 10.500
         """
         return float(self.instr.query(f"AUXV? {output}"))
+
+    # --- Setup commands ---
 
     def set_output_interface(self, interface):
         """Set the output communication interface.
@@ -861,6 +871,8 @@ class sr830:
         """
         self.instr.write(f"RSET {number}")
 
+    # --- Auto functions ---
+
     def auto_gain(self):
         """Automatically set gain."""
         self.instr.write(f"AGAN")
@@ -868,13 +880,15 @@ class sr830:
 
     def auto_reserve(self):
         """Automatically set reserve."""
-        self.instr.write(f"APHS")
+        self.instr.write(f"ARSV")
         # TODO: add read serial poll byte
 
     def auto_phase(self):
         """Automatically set phase."""
         self.instr.write(f"APHS")
         # TODO: add query phase shift to determine completion
+
+    # --- Data storage commands ---
 
     def set_sample_rate(self, rate):
         """Set the data sample rate.
@@ -998,6 +1012,8 @@ class sr830:
         This command will erase the data buffer.
         """
         self.instr.write(f"REST")
+
+    # --- Data transfer commands ---
 
     def measure(self, parameter):
         """Read the value of X, Y, R, or phase.
@@ -1222,6 +1238,9 @@ class sr830:
         """
         self.instr.write(f"STRD")
 
+    # --- Interface commands ---
+    # TODO: check differences between RS232 and GPIB. PyVISA might provide GPIB.
+
     def reset(self):
         """Reset the instrument to the default configuration."""
         self.instr.write(f"*RST")
@@ -1269,6 +1288,9 @@ class sr830:
             GPIB overide remote condition: 0 = No, 1 = Yes
         """
         return self.gpib_overide_remote_conditions[int(self.instr.write(f"OVRM?"))]
+
+    # --- Status reporting commands ---
+    # TODO: see if PyVISA implements these
 
     def clear_status_registers(self):
         """Clear all status registers."""
