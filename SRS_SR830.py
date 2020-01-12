@@ -1,44 +1,104 @@
-# created by James Ball, 2019-10-27
+"""Stanford Research Systems SR830 lock-in amplifier (LIA) control library."""
 
 import visa
 
-class SRS_SR830():
 
-    sensitivities = [2e-9, 5e-9, 10e-9, 20e-9, 50e-9, 100e-9, 200e-9,
-    500e-9, 1e-6, 2e-6, 5e-6, 10e-6, 20e-6, 50e-6, 100e-6, 200e-6,
-    500e-6, 1e-3, 2e-3, 5e-3, 10e-3, 20e-3, 50e-3, 100e-3, 200e-3,
-    500e-3, 1]
+class SRS_SR830:
+    """Stanford Research Systems SR830 LIA instrument."""
 
-    time_constants = [10e-6, 30e-6, 100e-6, 300e-6, 1e-3, 3e-3, 10e-3,
-    30e-3, 100e-3, 300e-3, 1, 3, 10, 30, 100, 300, 1e3, 3e3, 10e3, 30e3]
+    sensitivities = (
+        2e-9,
+        5e-9,
+        10e-9,
+        20e-9,
+        50e-9,
+        100e-9,
+        200e-9,
+        500e-9,
+        1e-6,
+        2e-6,
+        5e-6,
+        10e-6,
+        20e-6,
+        50e-6,
+        100e-6,
+        200e-6,
+        500e-6,
+        1e-3,
+        2e-3,
+        5e-3,
+        10e-3,
+        20e-3,
+        50e-3,
+        100e-3,
+        200e-3,
+        500e-3,
+        1,
+    )
 
-    display_ch1 = ['X', 'R', 'X Noise', 'Aux in 1', 'Aux in 2']
-    
-    display_ch2 = ['Y', 'Phase', 'Y Noise', 'Aux in 3', 'Aux in 4']
-    
-    ratio_ch1 = ['none', 'Aux in 1', 'Aux in 2']
-    
-    ratio_ch2 = ['none', 'Aux in 3', 'Aux in 4']
+    time_constants = (
+        10e-6,
+        30e-6,
+        100e-6,
+        300e-6,
+        1e-3,
+        3e-3,
+        10e-3,
+        30e-3,
+        100e-3,
+        300e-3,
+        1,
+        3,
+        10,
+        30,
+        100,
+        300,
+        1e3,
+        3e3,
+        10e3,
+        30e3,
+    )
 
-    sample_rates = [62.5e-3, 125e-3, 250e-3, 500e-3, 1, 2, 4, 8, 16,
-    32, 64, 128, 256, 512, 'Trigger']
+    display_ch1 = ("X", "R", "X Noise", "Aux in 1", "Aux in 2")
 
-    end_of_buffer_modes = ['1 Shot', 'Loop']
+    display_ch2 = ("Y", "Phase", "Y Noise", "Aux in 3", "Aux in 4")
 
-    trigger_start_modes = ['Off', 'Start scan']
+    ratio_ch1 = ("none", "Aux in 1", "Aux in 2")
 
-    data_transfer_modes = ['Off', 'On (DOS)', 'On (Windows)']
+    ratio_ch2 = ("none", "Aux in 3", "Aux in 4")
 
-    local_modes = ['Local', 'Remote', 'Local lockout']
+    sample_rates = (
+        62.5e-3,
+        125e-3,
+        250e-3,
+        500e-3,
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512,
+        "Trigger",
+    )
 
-    gpib_overide_remote_conditions = ['No', 'Yes']
+    end_of_buffer_modes = ("1 Shot", "Loop")
 
+    trigger_start_modes = ("Off", "Start scan")
+
+    data_transfer_modes = ("Off", "On (DOS)", "On (Windows)")
+
+    local_modes = ("Local", "Remote", "Local lockout")
+
+    gpib_overide_remote_conditions = ("No", "Yes")
 
     def __init__(self, addr, timeout=10000):
         rm = visa.ResourceManager()
         self.instr = rm.open_resource(addr)
         self.instr.timeout = timeout
-
 
     def set_ref_phase_shift(self, phase_shift):
         """Set the reference phase shift.
@@ -48,8 +108,7 @@ class SRS_SR830():
         phase_shift : float
             phase shift in degrees, -360 =< phase_shift =< 720
         """
-        self.instr.write(f'PHAS {phase_shift}')
-
+        self.instr.write(f"PHAS {phase_shift}")
 
     def get_ref_phase_shift(self):
         """Get the reference phase shift.
@@ -59,8 +118,7 @@ class SRS_SR830():
         phase_shift : float
             phase shift in degrees, -360 =< phase_shift =< 720
         """
-        return float(self.instr.query(f'PHAS?'))
-
+        return float(self.instr.query(f"PHAS?"))
 
     def set_ref_source(self, source):
         """Set the reference source.
@@ -70,8 +128,7 @@ class SRS_SR830():
         source : int
             refernce source, 0 = external, 1 = internal
         """
-        self.instr.write(f'FMOD {source}')
-    
+        self.instr.write(f"FMOD {source}")
 
     def get_ref_source(self):
         """Get the reference source.
@@ -81,14 +138,13 @@ class SRS_SR830():
         source : str
             refernce source
         """
-        source = int(self.instr.query(f'FMOD?'))
+        source = int(self.instr.query(f"FMOD?"))
         if source == 0:
-            return 'external'
+            return "external"
         elif source == 1:
-            return 'internal'
+            return "internal"
         else:
-            raise ValueError(f'Unknown reference source, {source}')
-    
+            raise ValueError(f"Unknown reference source, {source}")
 
     def set_ref_freq(self, freq):
         """Set the frequency of the internal oscillator.
@@ -98,8 +154,7 @@ class SRS_SR830():
         freq : float
             frequency in Hz, 0.001 =< freq =< 102000
         """
-        self.instr.write(f'FREQ {freq}')
-    
+        self.instr.write(f"FREQ {freq}")
 
     def get_ref_freq(self):
         """Get the reference frequency.
@@ -109,8 +164,7 @@ class SRS_SR830():
         freq : float
             frequency in Hz, 0.001 =< freq =< 102000
         """
-        return float(self.instr.query(f'FREQ?'))
-
+        return float(self.instr.query(f"FREQ?"))
 
     def set_reference_trigger(self, trigger):
         """Set the reference trigger type when using external ref.
@@ -120,8 +174,7 @@ class SRS_SR830():
         trigger : int
             trigger type: 0 = zero crossing, 1 = TTL rising egde, 2 = TTL falling edge
         """
-        self.instr.write(f'RSLP {trigger}')
-
+        self.instr.write(f"RSLP {trigger}")
 
     def get_reference_trigger(self):
         """Get the reference trigger type when using external ref.
@@ -131,16 +184,15 @@ class SRS_SR830():
         trigger : int
             trigger type: 0 = zero crossing, 1 = TTL rising egde, 2 = TTL falling edge
         """
-        trigger = int(self.instr.query(f'RSLP?'))
+        trigger = int(self.instr.query(f"RSLP?"))
         if trigger == 0:
-            return 'zero crossing'
+            return "zero crossing"
         elif trigger == 1:
-            return 'rising edge'
+            return "rising edge"
         elif trigger == 2:
-            return 'falling edge'
+            return "falling edge"
         else:
-            raise ValueError(f'Unknown trigger type, {trigger}')
-
+            raise ValueError(f"Unknown trigger type, {trigger}")
 
     def set_harmonic(self, harmonic):
         """Set detection harmonic.
@@ -150,9 +202,8 @@ class SRS_SR830():
         harmonic : int
             detection harmonic, 1 =< harmonic =< 19999
         """
-        self.instr.write(f'HARM {harmonic}')
+        self.instr.write(f"HARM {harmonic}")
 
-    
     def get_harmonic(self):
         """Get detection harmonic.
 
@@ -161,9 +212,8 @@ class SRS_SR830():
         harmonic : int
             detection harmonic, 1 =< harmonic =< 19999
         """
-        return int(self.instr.query(f'HARM?'))
+        return int(self.instr.query(f"HARM?"))
 
-    
     def set_sine_amplitude(self, amplitude):
         """Set the amplitude of the sine output.
 
@@ -172,8 +222,7 @@ class SRS_SR830():
         amplitude : float
             sine amplitude in volts, 0.004 =< amplitude =< 5.000
         """
-        self.instr.write(f'SLVL {amplitude}')
-
+        self.instr.write(f"SLVL {amplitude}")
 
     def get_sine_amplitude(self):
         """Get the amplitude of the sine output.
@@ -183,9 +232,8 @@ class SRS_SR830():
         amplitude : float
             sine amplitude in volts, 0.004 =< amplitude =< 5.000
         """
-        return float(self.instr.query(f'SLVL?'))
+        return float(self.instr.query(f"SLVL?"))
 
-    
     def set_input_configuration(self, config):
         """Set the input configuration.
 
@@ -194,8 +242,7 @@ class SRS_SR830():
         config : int
             input configuration: 0 = A, 1 = A-B, 2 = I (1 MOhm), 3 = I (100 MOhm)
         """
-        self.instr.write(f'ISRC {config}')
-
+        self.instr.write(f"ISRC {config}")
 
     def get_input_configuration(self):
         """Set the input configuration.
@@ -205,19 +252,18 @@ class SRS_SR830():
         config : int
             input configuration: 0 = A, 1 = A-B, 2 = I (1 MOhm), 3 = I (100 MOhm)
         """
-        config = int(self.instr.query(f'ISRC?'))
+        config = int(self.instr.query(f"ISRC?"))
         if config == 0:
-            return 'A'
+            return "A"
         elif config == 1:
-            return 'A-B'
+            return "A-B"
         elif config == 2:
-            return 'I (1 MOhm)'
+            return "I (1 MOhm)"
         elif config == 3:
-            return 'I (100 MOhm)'
+            return "I (100 MOhm)"
         else:
-            raise ValueError(f'Unknown input configuration, {config}')
-    
-    
+            raise ValueError(f"Unknown input configuration, {config}")
+
     def set_input_shield_gnd(self, grounding):
         """Set input shield grounding.
 
@@ -226,9 +272,8 @@ class SRS_SR830():
         grounding : int
             input shield grounding: 0 = Floating, 1 = Ground
         """
-        self.instr.write(f'IGND {grounding}')
+        self.instr.write(f"IGND {grounding}")
 
-    
     def get_input_shield_gnd(self, grounding):
         """Get input shield grounding.
 
@@ -237,14 +282,13 @@ class SRS_SR830():
         grounding : int
             input shield grounding: 0 = Floating, 1 = Ground
         """
-        grounding = int(self.instr.query(f'IGND?'))
+        grounding = int(self.instr.query(f"IGND?"))
         if grounding == 0:
-            return 'Floating'
+            return "Floating"
         elif grounding == 1:
-            return 'Ground'
+            return "Ground"
         else:
-            raise ValueError(f'Unknown input shield grounding, {grounding}')
-    
+            raise ValueError(f"Unknown input shield grounding, {grounding}")
 
     def set_input_coupling(self, coupling):
         """Set input coupling.
@@ -254,9 +298,8 @@ class SRS_SR830():
         coupling : int
             input coupling: 0 = AC, 1 = DC
         """
-        self.instr.write(f'ICPL {coupling}')
+        self.instr.write(f"ICPL {coupling}")
 
-    
     def get_input_coupling(self):
         """Get input coupling.
 
@@ -265,14 +308,13 @@ class SRS_SR830():
         coupling : int
             input coupling: 0 = AC, 1 = DC
         """
-        coupling = int(self.instr.query(f'ICPL?'))
+        coupling = int(self.instr.query(f"ICPL?"))
         if coupling == 0:
-            return 'AC'
+            return "AC"
         elif coupling == 1:
-            return 'DC'
+            return "DC"
         else:
-            raise ValueError(f'Unknown input coupling, {coupling}')
-    
+            raise ValueError(f"Unknown input coupling, {coupling}")
 
     def set_line_notch_status(self, status):
         """Set input line notch filter status.
@@ -282,9 +324,8 @@ class SRS_SR830():
         status : int
             input line notch filter status: 0 = none, 1 = line, 2 = 2 x line, 3 = both
         """
-        self.instr.write(f'ILIN {status}')
+        self.instr.write(f"ILIN {status}")
 
-    
     def get_line_notch_status(self, status):
         """Get input line notch filter status.
 
@@ -293,18 +334,17 @@ class SRS_SR830():
         status : int
             input line notch filter status: 0 = none, 1 = line, 2 = 2 x line, 3 = both
         """
-        status = int(self.instr.query(f'ILIN?'))
+        status = int(self.instr.query(f"ILIN?"))
         if status == 0:
-            return 'none'
+            return "none"
         elif status == 1:
-            return 'line'
+            return "line"
         elif status == 2:
-            return '2 x line'
+            return "2 x line"
         elif status == 3:
-            return 'both'
+            return "both"
         else:
-            raise ValueError(f'Unknown input line notch filter status, {status}')
-    
+            raise ValueError(f"Unknown input line notch filter status, {status}")
 
     def set_sensitivity(self, sensitivity):
         """Set sensitivity.
@@ -343,8 +383,7 @@ class SRS_SR830():
         sensitivity : int
             sensitivity in V/uA: see table above for mapping
         """
-        self.instr.write(f'SENS {sensitivity}')
-
+        self.instr.write(f"SENS {sensitivity}")
 
     def get_sensitivity(self):
         """Get sensitivity.
@@ -383,8 +422,7 @@ class SRS_SR830():
         sensitivity : int
             sensitivity in V/uA: see table above for mapping
         """
-        return str(sensitivities[int(self.instr.query(f'SENS?'))])
-    
+        return str(self.sensitivities[int(self.instr.query(f"SENS?"))])
 
     def set_reserve_mode(self, mode):
         """Set reserve mode.
@@ -394,8 +432,7 @@ class SRS_SR830():
         mode : int
             reserve mode: 0 = High reserve, 1 = Normal, 2 = Low noise
         """
-        self.instr.write(f'RMOD {mode}')
-
+        self.instr.write(f"RMOD {mode}")
 
     def get_reserve_mode(self):
         """Get reserve mode.
@@ -405,17 +442,16 @@ class SRS_SR830():
         mode : int
             reserve mode: 0 = High reserve, 1 = Normal, 2 = Low noise
         """
-        mode = int(self.instr.query(f'RMOD?'))
+        mode = int(self.instr.query(f"RMOD?"))
         if mode == 0:
-            return 'High reserve'
+            return "High reserve"
         elif mode == 1:
-            return 'Normal'
+            return "Normal"
         elif mode == 2:
-            return 'Low noise'
+            return "Low noise"
         else:
-            raise ValueError(f'Unknown reserve mode, {mode}')
+            raise ValueError(f"Unknown reserve mode, {mode}")
 
-    
     def set_time_constant(self, tc):
         """Set time constant.
 
@@ -446,8 +482,7 @@ class SRS_SR830():
         tc : int
             time constant in s: see table above for mapping
         """
-        self.instr.write(f'OFLT {tc}')
-    
+        self.instr.write(f"OFLT {tc}")
 
     def get_time_constant(self):
         """Get time constant.
@@ -479,8 +514,7 @@ class SRS_SR830():
         tc : int
             time constant in s: see table above for mapping
         """
-        return str(time_constants[int(self.instr.query(f'OFLT?'))])
-
+        return str(self.time_constants[int(self.instr.query(f"OFLT?"))])
 
     def set_lp_filter_slope(self, slope):
         """Set low pass filter slope.
@@ -490,8 +524,7 @@ class SRS_SR830():
         slope : int
             low pass filter slope: 0 = 6 dB/oct, 1 = 12 dB/oct, 2 = 18 dB/oct, 3 = 24 dB/oct
         """
-        self.instr.write(f'OFSL {slope}')
-
+        self.instr.write(f"OFSL {slope}")
 
     def get_lp_filter_slope(self):
         """Get low pass filter slope.
@@ -501,19 +534,18 @@ class SRS_SR830():
         slope : int
             low pass filter slope: 0 = 6 dB/oct, 1 = 12 dB/oct, 2 = 18 dB/oct, 3 = 24 dB/oct
         """
-        slope = int(self.instr.query(f'OFSL?'))
+        slope = int(self.instr.query(f"OFSL?"))
         if slope == 0:
-            return '6 dB/oct'
+            return "6 dB/oct"
         elif slope == 1:
-            return '12 dB/oct'
+            return "12 dB/oct"
         elif slope == 2:
-            return '18 dB/oct'
+            return "18 dB/oct"
         elif slope == 3:
-            return '24 dB/oct'
+            return "24 dB/oct"
         else:
-            raise ValueError(f'Unknown low pass filter slope, {slope}')
+            raise ValueError(f"Unknown low pass filter slope, {slope}")
 
-    
     def set_sync_status(self, status):
         """Set synchronous filter status.
 
@@ -522,9 +554,8 @@ class SRS_SR830():
         status : int
             synchronous filter status: 0 = Off, 1 = below 200 Hz
         """
-        self.instr.write(f'SYNC {status}')
+        self.instr.write(f"SYNC {status}")
 
-    
     def get_sync_status(self, status):
         """Get synchronous filter status.
 
@@ -533,14 +564,14 @@ class SRS_SR830():
         status : int
             synchronous filter status: 0 = Off, 1 = below 200 Hz
         """
-        status = int(self.instr.query(f'SYNC?'))
+        status = int(self.instr.query(f"SYNC?"))
         if status == 0:
-            return 'Off'
+            return "Off"
         elif status == 1:
-            return 'below 200 Hz'
+            return "below 200 Hz"
         else:
-            raise ValueError(f'Unknown synchronous filter status, {status}')
-    
+            raise ValueError(f"Unknown synchronous filter status, {status}")
+
     def set_display(self, channel, display=1, ratio=0):
         """Set a channel display configuration.
 
@@ -555,8 +586,7 @@ class SRS_SR830():
             ratio type CH1: 0 = none, 1 = Aux in 1, 2 = Aux in 2;
             ratio type CH2: 0 = none, 1 = Aux in 2, 2 = Aux in 4
         """
-        self.instr.write(f'DDEF {channel}, {display}, {ratio}')
-
+        self.instr.write(f"DDEF {channel}, {display}, {ratio}")
 
     def get_display(self, channel):
         """Get a channel display configuration.
@@ -575,14 +605,13 @@ class SRS_SR830():
             ratio type CH1: 0 = none, 1 = Aux in 1, 2 = Aux in 2;
             ratio type CH2: 0 = none, 1 = Aux in 2, 2 = Aux in 4
         """
-        resp = self.instr.write(f'DDEF? {channel}')
-        display, ratio = resp.split(',')
+        resp = self.instr.write(f"DDEF? {channel}")
+        display, ratio = resp.split(",")
         if channel == 1:
-            return display_ch1[int(display)], ratio_ch1[(int(ratio))]
+            return self.display_ch1[int(display)], self.ratio_ch1[(int(ratio))]
         elif channel == 2:
-            return display_ch2[int(display)], ratio_ch2[(int(ratio))]
+            return self.display_ch2[int(display)], self.ratio_ch2[(int(ratio))]
 
-    
     def set_front_outp(self, channel, output=0):
         """Set front panel output sources.
 
@@ -594,8 +623,7 @@ class SRS_SR830():
             output quantity CH1: 0 = CH1 display, 1 = X;
             output quantity CH2: 0 = CH2 display, 1 = Y;
         """
-        self.instr.write(f'FPOP {channel}, {output}')
-    
+        self.instr.write(f"FPOP {channel}, {output}")
 
     def get_front_outp(self, channel):
         """Get front panel output sources.
@@ -611,24 +639,23 @@ class SRS_SR830():
             output quantity CH1: 0 = CH1 display, 1 = X;
             output quantity CH2: 0 = CH2 display, 1 = Y;
         """
-        ouptut = int(self.instr.query(f'FPOP? {channel}'))
+        output = int(self.instr.query(f"FPOP? {channel}"))
         if channel == 1:
             if output == 0:
-                return 'CH1 display'
+                return "CH1 display"
             elif output == 1:
-                return 'X'
+                return "X"
             else:
-                raise ValueError(f'Unknown output for channel {channel}, {output}')
+                raise ValueError(f"Unknown output for channel {channel}, {output}")
         elif channel == 2:
             if output == 0:
-                return 'CH2 display'
+                return "CH2 display"
             elif output == 1:
-                return 'Y'
+                return "Y"
             else:
-                raise ValueError(f'Unknown output for channel {channel}, {output}')
+                raise ValueError(f"Unknown output for channel {channel}, {output}")
         else:
-            raise ValueError(f'Invalid channel, {channel}')
-
+            raise ValueError(f"Invalid channel, {channel}")
 
     def set_output_offset_expand(self, parameter, offset, expand):
         """Set the output offsets and expands.
@@ -642,8 +669,7 @@ class SRS_SR830():
         expand : int
             0 = no expand, 1 = 10, 2 = 100
         """
-        self.instr.write(f'OEXP {parameter}, {offset}, {expand}')
-
+        self.instr.write(f"OEXP {parameter}, {offset}, {expand}")
 
     def get_output_offset_expand(self, parameter):
         """Get the output offsets and expands.
@@ -660,20 +686,19 @@ class SRS_SR830():
         expand : int
             0 = no expand, 1 = 10, 2 = 100
         """
-        resp = self.instr.query(f'OEXP? {parameter}')
-        offset, expand = resp.split(',')
+        resp = self.instr.query(f"OEXP? {parameter}")
+        offset, expand = resp.split(",")
         offset = float(offset)
         expand = int(expand)
         if expand == 0:
-            return offset, 'no expand'
+            return offset, "no expand"
         elif expand == 1:
-            return offset, '10'
+            return offset, "10"
         elif expand == 2:
-            return offset, '100'
+            return offset, "100"
         else:
-            raise ValueError(f'Unknown expand, {expand}')
+            raise ValueError(f"Unknown expand, {expand}")
 
-    
     def auto_offset(self, parameter):
         """Set parameter offset to zero.
 
@@ -682,8 +707,7 @@ class SRS_SR830():
         parameter : int
             1 = X, 2 = Y, 3 = R
         """
-        self.instr.write(f'AOFF {parameter}')
-
+        self.instr.write(f"AOFF {parameter}")
 
     def get_aux_in(self, input):
         """Get voltage of auxiliary input.
@@ -693,9 +717,8 @@ class SRS_SR830():
         input : int
             auxiliary input (1-4)
         """
-        return float(self.instr.query(f'OAUX? {input}'))
+        return float(self.instr.query(f"OAUX? {input}"))
 
-    
     def set_aux_out(self, output, voltage):
         """Set voltage of auxiliary output.
 
@@ -706,9 +729,8 @@ class SRS_SR830():
         voltage : float
             output voltage, -10.500 =< voltage =< 10.500
         """
-        self.instr.write(f'AUXV {output}, {voltage}')
+        self.instr.write(f"AUXV {output}, {voltage}")
 
-    
     def get_aux_out(self, output):
         """Get voltage of auxiliary output.
 
@@ -722,8 +744,7 @@ class SRS_SR830():
         voltage : float
             output voltage, -10.500 =< voltage =< 10.500
         """
-        return float(self.instr.query(f'AUXV? {output}'))
-
+        return float(self.instr.query(f"AUXV? {output}"))
 
     def set_output_interface(self, interface):
         """Set the output communication interface. This command
@@ -735,8 +756,7 @@ class SRS_SR830():
         interface : int
             0 = RS232, 1 = GPIB
         """
-        self.instr.write(f'OUTX {interface}')
-
+        self.instr.write(f"OUTX {interface}")
 
     def get_output_interface(self):
         """Get the output communication interface.
@@ -746,14 +766,13 @@ class SRS_SR830():
         interface : int
             0 = RS232, 1 = GPIB
         """
-        interface = int(self.instr.query(f'OUTX?'))
+        interface = int(self.instr.query(f"OUTX?"))
         if interface == 0:
-            return 'RS232'
+            return "RS232"
         elif interface == 1:
-            return 'GPIB'
+            return "GPIB"
         else:
-            raise ValueError(f'Unknown communication interface, {interface}')
-
+            raise ValueError(f"Unknown communication interface, {interface}")
 
     def set_remote_status(self, status):
         """Set the remote status. Under normal operation every GPIB command 
@@ -765,9 +784,8 @@ class SRS_SR830():
         status : int
             front panel behaviour: 0 = normal, 1 = front panel enabled
         """
-        self.instr.write(f'OVRM {status}')
+        self.instr.write(f"OVRM {status}")
 
-    
     def set_key_click(self, status):
         """Set key click status.
 
@@ -776,8 +794,7 @@ class SRS_SR830():
         status : int
             0 = off, 1 = on
         """
-        self.instr.write(f'KCLK {status}')
-
+        self.instr.write(f"KCLK {status}")
 
     def get_key_click(self):
         """Get key click status.
@@ -787,14 +804,13 @@ class SRS_SR830():
         status : int
             0 = off, 1 = on
         """
-        status = int(self.instr.query(f'KCLK?'))
+        status = int(self.instr.query(f"KCLK?"))
         if status == 0:
-            return 'off'
+            return "off"
         elif status == 1:
-            return 'on'
+            return "on"
         else:
-            raise ValueError(f'Unknown key click status, {status}')
-    
+            raise ValueError(f"Unknown key click status, {status}")
 
     def set_alarm(self, status):
         """Set alarm status.
@@ -804,8 +820,7 @@ class SRS_SR830():
         status : int
             0 = off, 1 = on
         """
-        self.instr.write(f'ALRM {status}')
-
+        self.instr.write(f"ALRM {status}")
 
     def get_alarm(self):
         """Get alarm status.
@@ -815,15 +830,14 @@ class SRS_SR830():
         status : int
             0 = off, 1 = on
         """
-        status = int(self.instr.query(f'ALRM?'))
+        status = int(self.instr.query(f"ALRM?"))
         if status == 0:
-            return 'off'
+            return "off"
         elif status == 1:
-            return 'on'
+            return "on"
         else:
-            raise ValueError(f'Unknown alarm status, {status}')
+            raise ValueError(f"Unknown alarm status, {status}")
 
-    
     def save_setup(self, number):
         """Save lock-in setup in setting buffer.
 
@@ -832,8 +846,7 @@ class SRS_SR830():
         number : int
             buffer number
         """
-        self.instr.write(f'SSET {number}')
-
+        self.instr.write(f"SSET {number}")
 
     def recall_setup(self, number):
         """Recall lock-in setup from setting buffer.
@@ -843,25 +856,22 @@ class SRS_SR830():
         number : int
             buffer number
         """
-        self.instr.write(f'RSET {number}')
+        self.instr.write(f"RSET {number}")
 
-    
     def auto_gain(self):
         """Automatically set gain"""
-        self.instr.write(f'AGAN')
-        TODO: add read serial poll byte
+        self.instr.write(f"AGAN")
+        # TODO: add read serial poll byte
 
-    
     def auto_reserve(self):
         """Automatically set reserve"""
-        self.instr.write(f'APHS')
-        TODO: add read serial poll byte
+        self.instr.write(f"APHS")
+        # TODO: add read serial poll byte
 
     def auto_phase(self):
         """Automatically set phase"""
-        self.instr.write(f'APHS')
-        TODO: add query phase shift to determine completion
-
+        self.instr.write(f"APHS")
+        # TODO: add query phase shift to determine completion
 
     def set_sample_rate(self, rate):
         """Set the data sample rate.
@@ -889,8 +899,7 @@ class SRS_SR830():
         rate : int
             sample rate in Hz: see table above for mapping
         """
-        self.instr.write(f'SRAT {rate}')
-    
+        self.instr.write(f"SRAT {rate}")
 
     def get_sample_rate(self):
         """Get the data sample rate.
@@ -917,8 +926,7 @@ class SRS_SR830():
         rate : float or str
             sample rate in Hz: see table above for mapping
         """
-        return sample_rates[int(self.instr.query(f'SRAT?'))]]
-
+        return self.sample_rates[int(self.instr.query(f"SRAT?"))]
 
     def set_end_of_buffer_mode(self, mode):
         """Set the end of buffer mode. If Loop mode is used, make 
@@ -930,9 +938,8 @@ class SRS_SR830():
         mode : int
             end of buffer mode: 0 = 1 Shot, 1 = Loop
         """
-        self.instr.write(f'SEND {mode}')
+        self.instr.write(f"SEND {mode}")
 
-    
     def get_end_of_buffer_mode(self):
         """Get the end of buffer mode.
 
@@ -941,13 +948,11 @@ class SRS_SR830():
         mode : int
             end of buffer mode: 0 = 1 Shot, 1 = Loop
         """
-        return end_of_buffer_modes[int(self.instr.query(f'SEND?'))]
-    
+        return self.end_of_buffer_modes[int(self.instr.query(f"SEND?"))]
 
     def trigger(self):
         """Send software trigger."""
-        self.instr.write(f'TRIG')
-
+        self.instr.write(f"TRIG")
 
     def set_trigger_start_mode(self, mode):
         """Set the trigger start mode.
@@ -957,9 +962,8 @@ class SRS_SR830():
         mode : int
             trigger start mode: 0 = Off, 1 = Start scan
         """
-        self.instr.write(f'TSTR {mode}')
+        self.instr.write(f"TSTR {mode}")
 
-    
     def get_trigger_start_mode(self):
         """Get the trigger start mode.
 
@@ -968,26 +972,22 @@ class SRS_SR830():
         mode : int
             trigger start mode: 0 = Off, 1 = Start scan
         """
-        return trigger_start_modes[int(self.instr.query(f'TSTR?'))]
-
+        return self.trigger_start_modes[int(self.instr.query(f"TSTR?"))]
 
     def start(self):
         """Start or resume data storage. Ignored if storage already in
         progress."""
-        self.instr.write(f'STRT')
+        self.instr.write(f"STRT")
 
-    
     def pause(self):
         """Pause data storage. Ignored if storage is already paused
         or reset."""
-        self.instr.write(f'PAUS')
+        self.instr.write(f"PAUS")
 
-
-    def reset(self):
+    def reset_data_buffers(self):
         """Reset data buffers. This command will erase the data buffer."""
-        self.instr.write(f'REST')
+        self.instr.write(f"REST")
 
-    
     def measure(self, parameter):
         """Read the value of X, Y, R, or phase.
 
@@ -1001,9 +1001,8 @@ class SRS_SR830():
         value : float
             value of measured parameter
         """
-        return float(self.instr.query(f'OUTP? {parameter}'))
+        return float(self.instr.query(f"OUTP? {parameter}"))
 
-    
     def read_display(self, channel):
         """Read the value of a channel display.
 
@@ -1017,9 +1016,8 @@ class SRS_SR830():
         value : float
             displayed value in display units
         """
-        return float(self.instr.query(f'OUTR? {channel}'))
+        return float(self.instr.query(f"OUTR? {channel}"))
 
-    
     def measure_multiple(self, parameters):
         """Read multiple (2-6) parameter values simultaneously.
 
@@ -1058,11 +1056,10 @@ class SRS_SR830():
         values : tuple of float
             values of measured parameters
         """
-        parameters = ','.join([str(i) for i in parameters])
-        values = self.instr.query(f'SNAP? {parameters}').split(',')
+        parameters = ",".join([str(i) for i in parameters])
+        values = self.instr.query(f"SNAP? {parameters}").split(",")
         return (float(i) for i in values)
 
-    
     def read_aux_in(self, aux_in):
         """Read an auxiliary input value in volts.
 
@@ -1076,8 +1073,7 @@ class SRS_SR830():
         voltage : float
             auxiliary input voltage
         """
-        return float(self.instr.query(f'OAUX? {aux_in}'))
-
+        return float(self.instr.query(f"OAUX? {aux_in}"))
 
     def get_buffer_size(self):
         """Get the number of points stored in the buffer.
@@ -1087,9 +1083,8 @@ class SRS_SR830():
         N : int
             number of points in the buffer
         """
-        return int(self.instr.query(f'SPTS?'))
+        return int(self.instr.query(f"SPTS?"))
 
-    
     def get_ascii_buffer_data(self, channel, start_bin, bins):
         """Get the points stored in a channel buffer range.
 
@@ -1118,9 +1113,8 @@ class SRS_SR830():
         buffer : tuple of float
             data stored in buffer range
         """
-        buffer = self.instr.query(f'TRCA? {channel},{start_bin},{bins}').split(',')
+        buffer = self.instr.query(f"TRCA? {channel},{start_bin},{bins}").split(",")
         return (float(i) for i in buffer)
-
 
     def get_binary_buffer_data(self, channel, start_bin, bins):
         """Get the points stored in a channel buffer range.
@@ -1150,10 +1144,9 @@ class SRS_SR830():
         buffer : tuple of float
             data stored in buffer range
         """
-        TODO: fix formatting
-        buffer = self.instr.query(f'TRCB? {channel},{start_bin},{bins}').split(',')
+        # TODO: fix formatting
+        buffer = self.instr.query(f"TRCB? {channel},{start_bin},{bins}").split(",")
         pass
-
 
     def get_non_norm_buffer_data(self, channel, start_bin, bins):
         """Get the points stored in a channel buffer range.
@@ -1183,10 +1176,9 @@ class SRS_SR830():
         buffer : tuple of float
             data stored in buffer range
         """
-        TODO: fix formatting
-        buffer = self.instr.query(f'TRCL? {channel},{start_bin},{bins}').split(',')
+        # TODO: fix formatting
+        buffer = self.instr.query(f"TRCL? {channel},{start_bin},{bins}").split(",")
         pass
-
 
     def set_data_transfer_mode(self, mode):
         """Get the data transfer mode.
@@ -1196,8 +1188,7 @@ class SRS_SR830():
         mode : str
             0 = Off, 1 = On (DOS), 2 = On (Windows)
         """
-        self.instr.write(f'FAST {mode}')
-
+        self.instr.write(f"FAST {mode}")
 
     def get_data_transfer_mode(self):
         """Get the data transfer mode.
@@ -1207,8 +1198,7 @@ class SRS_SR830():
         mode : str
             0 = Off, 1 = On (DOS), 2 = On (Windows)
         """
-        return data_transfer_modes[int(self.instr.query(f'FAST?'))]
-
+        return self.data_transfer_modes[int(self.instr.query(f"FAST?"))]
 
     def start_scan(self):
         """After turning on fast data transfer, this function starts
@@ -1217,19 +1207,16 @@ class SRS_SR830():
         the first data points are transmitted. Do not use the STRT
         command to start the scan.
         """
-        self.instr.write(f'STRD')
+        self.instr.write(f"STRD")
 
-    
     def reset(self):
         """Reset the instrument to the default configuration."""
-        self.instr.write(f'*RST')
+        self.instr.write(f"*RST")
 
-    
     def get_idn(self):
         """Get the identity string."""
-        self.instr.write(f'*IDN?')
+        self.instr.write(f"*IDN?")
 
-    
     def set_local_mode(self, local):
         """Set the local/remote function.
         
@@ -1238,8 +1225,7 @@ class SRS_SR830():
         local : int
             0 = Local, 1 = Remote, 2 = Local lockout
         """
-        self.instr.write(f'LOCL {local}')
-    
+        self.instr.write(f"LOCL {local}")
 
     def get_local_mode(self):
         """Get the local/remote function.
@@ -1249,8 +1235,7 @@ class SRS_SR830():
         local : int
             0 = Local, 1 = Remote, 2 = Local lockout
         """
-        return local_modes[int(self.instr.query('LOCL?'))]
-    
+        return self.local_modes[int(self.instr.query("LOCL?"))]
 
     def set_gpib_overide_remote(self, condition):
         """Set the GPIB overide remote condition.
@@ -1260,8 +1245,7 @@ class SRS_SR830():
         condition : int
             GPIB overide remote condition: 0 = No, 1 = Yes
         """
-        self.instr.write(f'OVRM {condition}')
-
+        self.instr.write(f"OVRM {condition}")
 
     def get_gpib_overide_remote(self):
         """Get the GPIB overide remote condition.
@@ -1271,14 +1255,9 @@ class SRS_SR830():
         condition : int
             GPIB overide remote condition: 0 = No, 1 = Yes
         """
-        return gpib_overide_remote_conditions[int(self.instr.write(f'OVRM?'))]
-    
+        return self.gpib_overide_remote_conditions[int(self.instr.write(f"OVRM?"))]
 
     def clear_status_registers(self):
         """Clear all status registers."""
-        self.instr.write('*CLS')
+        self.instr.write("*CLS")
 
-    
-    
-        
-        
