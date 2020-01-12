@@ -3,7 +3,7 @@
 import visa
 
 
-class SRS_SR830:
+class sr830:
     """Stanford Research Systems SR830 LIA instrument."""
 
     sensitivities = (
