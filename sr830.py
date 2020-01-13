@@ -113,7 +113,9 @@ class sr830:
         phase_shift : float
             phase shift in degrees, -360 =< phase_shift =< 720
         """
-        self.instr.write(f"PHAS {phase_shift}")
+        cmd = f"PHAS {phase_shift}"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def get_ref_phase_shift(self):
         """Get the reference phase shift.
@@ -123,7 +125,10 @@ class sr830:
         phase_shift : float
             phase shift in degrees, -360 =< phase_shift =< 720
         """
-        return float(self.instr.query(f"PHAS?"))
+        cmd = f"PHAS?"
+        phase_shift = float(self.instr.query(cmd))
+        logger.info(cmd)
+        return phase_shift
 
     def set_ref_source(self, source):
         """Set the reference source.
@@ -133,7 +138,9 @@ class sr830:
         source : int
             refernce source, 0 = external, 1 = internal
         """
-        self.instr.write(f"FMOD {source}")
+        cmd = f"FMOD {source}"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def get_ref_source(self):
         """Get the reference source.
@@ -143,7 +150,9 @@ class sr830:
         source : str
             refernce source
         """
-        source = int(self.instr.query(f"FMOD?"))
+        cmd = f"FMOD?"
+        source = int(self.instr.query(cmd))
+        logger.info(cmd)
         if source == 0:
             return "external"
         elif source == 1:
@@ -159,7 +168,9 @@ class sr830:
         freq : float
             frequency in Hz, 0.001 =< freq =< 102000
         """
-        self.instr.write(f"FREQ {freq}")
+        cmd = f"FREQ {freq}"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def get_ref_freq(self):
         """Get the reference frequency.
@@ -169,7 +180,10 @@ class sr830:
         freq : float
             frequency in Hz, 0.001 =< freq =< 102000
         """
-        return float(self.instr.query(f"FREQ?"))
+        cmd = f"FREQ?"
+        freq = float(self.instr.query(cmd))
+        logger.info(cmd)
+        return freq
 
     def set_reference_trigger(self, trigger):
         """Set the reference trigger type when using external ref.
@@ -179,7 +193,9 @@ class sr830:
         trigger : int
             trigger type: 0 = zero crossing, 1 = TTL rising egde, 2 = TTL falling edge
         """
-        self.instr.write(f"RSLP {trigger}")
+        cmd = f"RSLP {trigger}"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def get_reference_trigger(self):
         """Get the reference trigger type when using external ref.
@@ -189,7 +205,9 @@ class sr830:
         trigger : int
             trigger type: 0 = zero crossing, 1 = TTL rising egde, 2 = TTL falling edge
         """
-        trigger = int(self.instr.query(f"RSLP?"))
+        cmd = f"RSLP?"
+        trigger = int(self.instr.query(cmd))
+        logger.info(cmd)
         if trigger == 0:
             return "zero crossing"
         elif trigger == 1:
@@ -207,7 +225,9 @@ class sr830:
         harmonic : int
             detection harmonic, 1 =< harmonic =< 19999
         """
-        self.instr.write(f"HARM {harmonic}")
+        cmd = f"HARM {harmonic}"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def get_harmonic(self):
         """Get detection harmonic.
@@ -217,7 +237,10 @@ class sr830:
         harmonic : int
             detection harmonic, 1 =< harmonic =< 19999
         """
-        return int(self.instr.query(f"HARM?"))
+        cmd = f"HARM?"
+        harmonic = int(self.instr.query(cmd))
+        logger.info(cmd)
+        return harmonic
 
     def set_sine_amplitude(self, amplitude):
         """Set the amplitude of the sine output.
@@ -227,7 +250,9 @@ class sr830:
         amplitude : float
             sine amplitude in volts, 0.004 =< amplitude =< 5.000
         """
-        self.instr.write(f"SLVL {amplitude}")
+        cmd = f"SLVL {amplitude}"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def get_sine_amplitude(self):
         """Get the amplitude of the sine output.
@@ -237,7 +262,10 @@ class sr830:
         amplitude : float
             sine amplitude in volts, 0.004 =< amplitude =< 5.000
         """
-        return float(self.instr.query(f"SLVL?"))
+        cmd = f"SLVL?"
+        amplitude = float(self.instr.query(cmd))
+        logger.info(cmd)
+        return amplitude
 
     def set_input_configuration(self, config):
         """Set the input configuration.
@@ -247,7 +275,9 @@ class sr830:
         config : int
             input configuration: 0 = A, 1 = A-B, 2 = I (1 MOhm), 3 = I (100 MOhm)
         """
-        self.instr.write(f"ISRC {config}")
+        cmd = f"ISRC {config}"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def get_input_configuration(self):
         """Set the input configuration.
@@ -257,7 +287,9 @@ class sr830:
         config : int
             input configuration: 0 = A, 1 = A-B, 2 = I (1 MOhm), 3 = I (100 MOhm)
         """
-        config = int(self.instr.query(f"ISRC?"))
+        cmd = f"ISRC?"
+        config = int(self.instr.query(cmd))
+        logger.info(cmd)
         if config == 0:
             return "A"
         elif config == 1:
@@ -277,7 +309,9 @@ class sr830:
         grounding : int
             input shield grounding: 0 = Floating, 1 = Ground
         """
-        self.instr.write(f"IGND {grounding}")
+        cmd = f"IGND {grounding}"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def get_input_shield_gnd(self, grounding):
         """Get input shield grounding.
@@ -287,7 +321,9 @@ class sr830:
         grounding : int
             input shield grounding: 0 = Floating, 1 = Ground
         """
-        grounding = int(self.instr.query(f"IGND?"))
+        cmd = f"IGND?"
+        grounding = int(self.instr.query(cmd))
+        logger.info(cmd)
         if grounding == 0:
             return "Floating"
         elif grounding == 1:
@@ -303,7 +339,9 @@ class sr830:
         coupling : int
             input coupling: 0 = AC, 1 = DC
         """
-        self.instr.write(f"ICPL {coupling}")
+        cmd = f"ICPL {coupling}"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def get_input_coupling(self):
         """Get input coupling.
@@ -313,7 +351,9 @@ class sr830:
         coupling : int
             input coupling: 0 = AC, 1 = DC
         """
-        coupling = int(self.instr.query(f"ICPL?"))
+        cmd = f"ICPL?"
+        coupling = int(self.instr.query(cmd))
+        logger.info(cmd)
         if coupling == 0:
             return "AC"
         elif coupling == 1:
@@ -329,7 +369,9 @@ class sr830:
         status : int
             input line notch filter status: 0 = none, 1 = line, 2 = 2 x line, 3 = both
         """
-        self.instr.write(f"ILIN {status}")
+        cmd = f"ILIN {status}"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def get_line_notch_status(self, status):
         """Get input line notch filter status.
@@ -339,7 +381,9 @@ class sr830:
         status : int
             input line notch filter status: 0 = none, 1 = line, 2 = 2 x line, 3 = both
         """
-        status = int(self.instr.query(f"ILIN?"))
+        cmd = f"ILIN?"
+        status = int(self.instr.query(cmd))
+        logger.info(cmd)
         if status == 0:
             return "none"
         elif status == 1:
