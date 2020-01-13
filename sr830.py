@@ -1123,10 +1123,9 @@ class sr830:
         Bins (or points) a labelled from 0 (oldest) to N-1 (newest)
         where N is the total number of bins.
 
-        If data storage is set to Loop mode, make sure that
-        storage is paused before reading any data. This is because
-        the points are indexed relative to the most recent point
-        which is continually changing.
+        If data storage is set to Loop mode, storage is paused before
+        reading any data. This is because the points are indexed relative
+        to the most recent point which is continually changing.
 
         Parameters
         ----------
@@ -1142,8 +1141,22 @@ class sr830:
         buffer : tuple of float
             data stored in buffer range
         """
-        buffer = self.instr.query(f"TRCA? {channel},{start_bin},{bins}").split(",")
-        return (float(i) for i in buffer)
+        cmd = f"TRCA? {channel},{start_bin},{bins}"
+
+        # pause storage if loop mode
+        buffer_mode = self.get_end_of_buffer_mode()
+        if buffer_mode == "Loop":
+            self.pause()
+
+        buffer = self.instr.query_ascii_values(cmd, container=tuple())
+
+        # restart loop storage if previously set
+        if buffer_mode == "Loop":
+            self.set_end_of_buffer_mode(mode=1)
+
+        logger.info(cmd)
+
+        return buffer
 
     def get_binary_buffer_data(self, channel, start_bin, bins):
         """Get the points stored in a channel buffer range.
@@ -1154,10 +1167,9 @@ class sr830:
         Bins (or points) a labelled from 0 (oldest) to N-1 (newest)
         where N is the total number of bins.
 
-        If data storage is set to Loop mode, make sure that
-        storage is paused before reading any data. This is because
-        the points are indexed relative to the most recent point
-        which is continually changing.
+        If data storage is set to Loop mode, storage is paused before
+        reading any data. This is because the points are indexed relative
+        to the most recent point which is continually changing.
 
         Parameters
         ----------
@@ -1173,9 +1185,38 @@ class sr830:
         buffer : tuple of float
             data stored in buffer range
         """
-        # TODO: fix formatting
-        buffer = self.instr.query(f"TRCB? {channel},{start_bin},{bins}").split(",")
-        pass
+        cmd = f"TRCB? {channel},{start_bin},{bins}"
+
+        if self.instr.interface_type == 4:
+            # TODO: When using the RS232 interface, the word length must be 8 bits
+            expect_termination = False
+            logger.warning(
+                f"SRS recommends not using binary transfers over serial interfaces."
+            )
+        elif self.instr.interface_type == 1:
+            expect_termination = True
+
+        # pause storage if loop mode
+        buffer_mode = self.get_end_of_buffer_mode()
+        if buffer_mode == "Loop":
+            self.pause()
+
+        # TODO: When using GPIB, make sure that the software is configured to NOT
+        # terminate reading upon receipt of a CR or LF
+        buffer = self.instr.query_binary_values(
+            cmd,
+            container=tuple(),
+            expect_termination=expect_termination,
+            data_points=bins,
+        )
+
+        # restart loop storage if previously set
+        if buffer_mode == "Loop":
+            self.set_end_of_buffer_mode(mode=1)
+
+        logger.info(cmd)
+
+        return buffer
 
     def get_non_norm_buffer_data(self, channel, start_bin, bins):
         """Get the points stored in a channel buffer range.
