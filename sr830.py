@@ -573,7 +573,8 @@ class sr830:
         Parameters
         ----------
         slope : int
-            low pass filter slope: 0 = 6 dB/oct, 1 = 12 dB/oct, 2 = 18 dB/oct, 3 = 24 dB/oct
+            low pass filter slope: 0 = 6 dB/oct, 1 = 12 dB/oct, 2 = 18 dB/oct,
+            3 = 24 dB/oct
         """
         self.instr.write(f"OFSL {slope}")
 
@@ -583,7 +584,8 @@ class sr830:
         Parameters
         ----------
         slope : int
-            low pass filter slope: 0 = 6 dB/oct, 1 = 12 dB/oct, 2 = 18 dB/oct, 3 = 24 dB/oct
+            low pass filter slope: 0 = 6 dB/oct, 1 = 12 dB/oct, 2 = 18 dB/oct,
+            3 = 24 dB/oct
         """
         slope = int(self.instr.query(f"OFSL?"))
         if slope == 0:
@@ -633,8 +635,10 @@ class sr830:
         channel : int
             channel: 1 = CH1, 2 = CH2
         display : int
-            display parameter CH1: 0 = X, 1 = R, 2 = X Noise, 3 = Aux in 1, 4 = Aux in 2;
-            display parameter CH2: 0 = Y, 1 = Phase, 3 = Y Noise, 3 = Aux in 3, 4 = Aux in 4
+            display parameter CH1: 0 = X, 1 = R, 2 = X Noise, 3 = Aux in 1,
+            4 = Aux in 2;
+            display parameter CH2: 0 = Y, 1 = Phase, 3 = Y Noise, 3 = Aux in 3,
+            4 = Aux in 4
         ratio : int
             ratio type CH1: 0 = none, 1 = Aux in 1, 2 = Aux in 2;
             ratio type CH2: 0 = none, 1 = Aux in 2, 2 = Aux in 4
@@ -648,12 +652,14 @@ class sr830:
         ----------
         channel : int
             channel: 1 = CH1, 2 = CH2
-        
+
         Returns
         -------
         display : int
-            display parameter CH1: 0 = X, 1 = R, 2 = X Noise, 3 = Aux in 1, 4 = Aux in 2;
-            display parameter CH2: 0 = Y, 1 = Phase, 3 = Y Noise, 3 = Aux in 3, 4 = Aux in 4
+            display parameter CH1: 0 = X, 1 = R, 2 = X Noise, 3 = Aux in 1,
+            4 = Aux in 2;
+            display parameter CH2: 0 = Y, 1 = Phase, 3 = Y Noise, 3 = Aux in 3,
+            4 = Aux in 4
         ratio : int
             ratio type CH1: 0 = none, 1 = Aux in 1, 2 = Aux in 2;
             ratio type CH2: 0 = none, 1 = Aux in 2, 2 = Aux in 4
@@ -685,7 +691,7 @@ class sr830:
         ----------
         channel : int
             channel: 1 = CH1, 2 = CH2
-        
+
         Returns
         -------
         output : int
@@ -731,7 +737,7 @@ class sr830:
         ----------
         parameter : int
             1 = X, 2 = Y, 3 = R
-        
+
         Returns
         -------
         offset : float
@@ -805,7 +811,7 @@ class sr830:
 
     def set_output_interface(self, interface):
         """Set the output communication interface.
-        
+
         This command should be sent before any query commands to direct the
         responses to the interface in use.
 
@@ -834,7 +840,7 @@ class sr830:
 
     def set_remote_status(self, status):
         """Set the remote status.
-        
+
         Under normal operation every GPIB command puts the instrument in the remote
         state with the front panel deactivated.
 
@@ -938,7 +944,7 @@ class sr830:
 
     def set_sample_rate(self, rate):
         """Set the data sample rate.
-        
+
         value   sample rate (Hz)
         0       62.5e-3
         1       125e-3
@@ -993,7 +999,7 @@ class sr830:
 
     def set_end_of_buffer_mode(self, mode):
         """Set the end of buffer mode.
-        
+
         If Loop mode is used, make sure to pause data storage before reading the
         data to avoid confusion about which point is the most recent.
 
@@ -1040,21 +1046,21 @@ class sr830:
 
     def start(self):
         """Start or resume data storage.
-        
+
         Ignored if storage already in progress.
         """
         self.instr.write(f"STRT")
 
     def pause(self):
         """Pause data storage.
-        
+
         Ignored if storage is already paused or reset.
         """
         self.instr.write(f"PAUS")
 
     def reset_data_buffers(self):
         """Reset data buffers.
-        
+
         This command will erase the data buffer.
         """
         self.instr.write(f"REST")
@@ -1068,7 +1074,7 @@ class sr830:
         ----------
         parameter : int
             measured parameter: 1 = X, 2 = Y, 3 = R, 4 = phase
-        
+
         Returns
         -------
         value : float
@@ -1104,7 +1110,7 @@ class sr830:
 
         The values of the Aux Inputs may have an uncertainty of up to
         32µs. The frequency is computed only every other period or 40 ms,
-        whichever is longer. 
+        whichever is longer.
 
         value   parameter
         1       X
@@ -1123,7 +1129,7 @@ class sr830:
         ---------
         paramters : list or tuple of int
             parameters to measure: see table above
-        
+
         Returns
         -------
         values : tuple of float
@@ -1179,7 +1185,7 @@ class sr830:
             starting bin to read where 0 is oldest
         bins : int
             number of bins to read
-        
+
         Returns
         -------
         buffer : tuple of float
@@ -1223,7 +1229,7 @@ class sr830:
             starting bin to read where 0 is oldest
         bins : int
             number of bins to read
-        
+
         Returns
         -------
         buffer : tuple of float
@@ -1284,7 +1290,7 @@ class sr830:
             starting bin to read where 0 is oldest
         bins : int
             number of bins to read
-        
+
         Returns
         -------
         buffer : tuple of float
@@ -1296,7 +1302,7 @@ class sr830:
 
     def set_data_transfer_mode(self, mode):
         """Get the data transfer mode.
-        
+
         Parameters
         ----------
         mode : str
@@ -1306,7 +1312,7 @@ class sr830:
 
     def get_data_transfer_mode(self):
         """Get the data transfer mode.
-        
+
         Returns
         -------
         mode : str
@@ -1316,7 +1322,7 @@ class sr830:
 
     def start_scan(self):
         """Start scan.
-        
+
         After turning on fast data transfer, this function starts
         the scan after a delay of 0.5 sec. This delay allows the
         controlling interface to place itself in the read mode before
@@ -1338,7 +1344,7 @@ class sr830:
 
     def set_local_mode(self, local):
         """Set the local/remote function.
-        
+
         Parameters
         ----------
         local : int
@@ -1394,4 +1400,3 @@ if __name__ == "__main__":
     logger = logging.getLogger()
 else:
     logger = logging.getLogger(__name__)
-
