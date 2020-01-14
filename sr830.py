@@ -102,6 +102,7 @@ class sr830:
         rm = visa.ResourceManager()
         self.instr = rm.open_resource(addr)
         self.instr.timeout = timeout
+        self.get_idn()
 
     # --- Reference and phase commands ---
 
@@ -1340,7 +1341,9 @@ class sr830:
 
     def get_idn(self):
         """Get the identity string."""
-        self.instr.write(f"*IDN?")
+        cmd = f"*IDN?"
+        self.instr.write(cmd)
+        logger.info(cmd)
 
     def set_local_mode(self, local):
         """Set the local/remote function.
