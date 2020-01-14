@@ -182,6 +182,7 @@ class sr830:
         """
         self.instr = rm.open_resource(address)
         self.instr.timeout = timeout
+        # TODO: add return_int option to methods, make sure docstrings are consistent
         self.return_int = return_int
         self.set_output_interface(output_interface)
         self._add_idn()
