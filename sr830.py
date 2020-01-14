@@ -104,7 +104,19 @@ class sr830:
         """Open VISA resource for instr."""
         self.instr = rm.open_resource(addr)
         self.instr.timeout = timeout
-        self.get_idn()
+        self._add_idn()
+        logger.info(
+            f"{self.manufacturer} {self.model} {self.serial_number} {self.firmware_version} connected!"
+        )
+
+    def _add_idn(self):
+        """Add identity info attributes from identity string."""
+        idn = self.get_idn()
+        idn = idn.split(",")
+        self.manufacturer = idn[0]
+        self.model = idn[1]
+        self.serial_number = idn[2]
+        self.firmware_version = idn[3]
 
     # --- Reference and phase commands ---
 
@@ -118,7 +130,7 @@ class sr830:
         """
         cmd = f"PHAS {phase_shift}"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_ref_phase_shift(self):
         """Get the reference phase shift.
@@ -130,7 +142,7 @@ class sr830:
         """
         cmd = f"PHAS?"
         phase_shift = float(self.instr.query(cmd))
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return phase_shift
 
     def set_ref_source(self, source):
@@ -143,7 +155,7 @@ class sr830:
         """
         cmd = f"FMOD {source}"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_ref_source(self):
         """Get the reference source.
@@ -155,7 +167,7 @@ class sr830:
         """
         cmd = f"FMOD?"
         source = int(self.instr.query(cmd))
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if source == 0:
             return "external"
         elif source == 1:
@@ -173,7 +185,7 @@ class sr830:
         """
         cmd = f"FREQ {freq}"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_ref_freq(self):
         """Get the reference frequency.
@@ -185,7 +197,7 @@ class sr830:
         """
         cmd = f"FREQ?"
         freq = float(self.instr.query(cmd))
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return freq
 
     def set_reference_trigger(self, trigger):
@@ -198,7 +210,7 @@ class sr830:
         """
         cmd = f"RSLP {trigger}"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_reference_trigger(self):
         """Get the reference trigger type when using external ref.
@@ -210,7 +222,7 @@ class sr830:
         """
         cmd = f"RSLP?"
         trigger = int(self.instr.query(cmd))
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if trigger == 0:
             return "zero crossing"
         elif trigger == 1:
@@ -230,7 +242,7 @@ class sr830:
         """
         cmd = f"HARM {harmonic}"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_harmonic(self):
         """Get detection harmonic.
@@ -242,7 +254,7 @@ class sr830:
         """
         cmd = f"HARM?"
         harmonic = int(self.instr.query(cmd))
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return harmonic
 
     def set_sine_amplitude(self, amplitude):
@@ -255,7 +267,7 @@ class sr830:
         """
         cmd = f"SLVL {amplitude}"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_sine_amplitude(self):
         """Get the amplitude of the sine output.
@@ -267,7 +279,7 @@ class sr830:
         """
         cmd = f"SLVL?"
         amplitude = float(self.instr.query(cmd))
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return amplitude
 
     def set_input_configuration(self, config):
@@ -280,7 +292,7 @@ class sr830:
         """
         cmd = f"ISRC {config}"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_input_configuration(self):
         """Set the input configuration.
@@ -292,7 +304,7 @@ class sr830:
         """
         cmd = f"ISRC?"
         config = int(self.instr.query(cmd))
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if config == 0:
             return "A"
         elif config == 1:
@@ -314,7 +326,7 @@ class sr830:
         """
         cmd = f"IGND {grounding}"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_input_shield_gnd(self, grounding):
         """Get input shield grounding.
@@ -326,7 +338,7 @@ class sr830:
         """
         cmd = f"IGND?"
         grounding = int(self.instr.query(cmd))
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if grounding == 0:
             return "Floating"
         elif grounding == 1:
@@ -344,7 +356,7 @@ class sr830:
         """
         cmd = f"ICPL {coupling}"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_input_coupling(self):
         """Get input coupling.
@@ -356,7 +368,7 @@ class sr830:
         """
         cmd = f"ICPL?"
         coupling = int(self.instr.query(cmd))
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if coupling == 0:
             return "AC"
         elif coupling == 1:
@@ -374,7 +386,7 @@ class sr830:
         """
         cmd = f"ILIN {status}"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_line_notch_status(self, status):
         """Get input line notch filter status.
@@ -386,7 +398,7 @@ class sr830:
         """
         cmd = f"ILIN?"
         status = int(self.instr.query(cmd))
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if status == 0:
             return "none"
         elif status == 1:
@@ -437,7 +449,9 @@ class sr830:
         sensitivity : int
             sensitivity in V/uA: see table above for mapping
         """
-        self.instr.write(f"SENS {sensitivity}")
+        cmd = f"SENS {sensitivity}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_sensitivity(self):
         """Get sensitivity.
@@ -476,7 +490,10 @@ class sr830:
         sensitivity : int
             sensitivity in V/uA: see table above for mapping
         """
-        return str(self.sensitivities[int(self.instr.query(f"SENS?"))])
+        cmd = f"SENS?"
+        sensitivity = self.sensitivities[int(self.instr.query(cmd))]
+        logger.info(f"{self.serial_number} \'{cmd}\'")
+        return sensitivity
 
     def set_reserve_mode(self, mode):
         """Set reserve mode.
@@ -486,7 +503,9 @@ class sr830:
         mode : int
             reserve mode: 0 = High reserve, 1 = Normal, 2 = Low noise
         """
-        self.instr.write(f"RMOD {mode}")
+        cmd = f"RMOD {mode}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_reserve_mode(self):
         """Get reserve mode.
@@ -496,7 +515,9 @@ class sr830:
         mode : int
             reserve mode: 0 = High reserve, 1 = Normal, 2 = Low noise
         """
-        mode = int(self.instr.query(f"RMOD?"))
+        cmd = f"RMOD?"
+        mode = int(self.instr.query(cmd))
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if mode == 0:
             return "High reserve"
         elif mode == 1:
@@ -536,39 +557,22 @@ class sr830:
         tc : int
             time constant in s: see table above for mapping
         """
-        self.instr.write(f"OFLT {tc}")
+        cmd = f"OFLT {tc}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_time_constant(self):
         """Get time constant.
 
-        value   time constant (s)
-        0       10e-6
-        1       30e-6
-        2       100e-6
-        3       300e-6
-        4       1e-3
-        5       3e-3
-        6       10e-3
-        7       30e-3
-        8       100e-3
-        9       300e-3
-        10      1
-        11      3
-        12      10
-        13      30
-        14      100
-        15      300
-        16      1e3
-        17      3e3
-        18      10e3
-        19      30e3
-
         Returns
         -------
         tc : int
-            time constant in s: see table above for mapping
+            time constant in s
         """
-        return str(self.time_constants[int(self.instr.query(f"OFLT?"))])
+        cmd = f"OFLT?"
+        tc = self.time_constants[int(self.instr.query(cmd))]
+        logger.info(f"{self.serial_number} \'{cmd}\'")
+        return tc
 
     def set_lp_filter_slope(self, slope):
         """Set low pass filter slope.
@@ -579,7 +583,9 @@ class sr830:
             low pass filter slope: 0 = 6 dB/oct, 1 = 12 dB/oct, 2 = 18 dB/oct,
             3 = 24 dB/oct
         """
-        self.instr.write(f"OFSL {slope}")
+        cmd = f"OFSL {slope}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_lp_filter_slope(self):
         """Get low pass filter slope.
@@ -590,7 +596,9 @@ class sr830:
             low pass filter slope: 0 = 6 dB/oct, 1 = 12 dB/oct, 2 = 18 dB/oct,
             3 = 24 dB/oct
         """
-        slope = int(self.instr.query(f"OFSL?"))
+        cmd = f"OFSL?"
+        slope = int(self.instr.query(cmd))
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if slope == 0:
             return "6 dB/oct"
         elif slope == 1:
@@ -610,7 +618,9 @@ class sr830:
         status : int
             synchronous filter status: 0 = Off, 1 = below 200 Hz
         """
-        self.instr.write(f"SYNC {status}")
+        cmd = f"SYNC {status}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_sync_status(self, status):
         """Get synchronous filter status.
@@ -620,7 +630,9 @@ class sr830:
         status : int
             synchronous filter status: 0 = Off, 1 = below 200 Hz
         """
-        status = int(self.instr.query(f"SYNC?"))
+        cmd = f"SYNC?"
+        status = int(self.instr.query(cmd))
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if status == 0:
             return "Off"
         elif status == 1:
@@ -646,7 +658,9 @@ class sr830:
             ratio type CH1: 0 = none, 1 = Aux in 1, 2 = Aux in 2;
             ratio type CH2: 0 = none, 1 = Aux in 2, 2 = Aux in 4
         """
-        self.instr.write(f"DDEF {channel}, {display}, {ratio}")
+        cmd = f"DDEF {channel}, {display}, {ratio}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_display(self, channel):
         """Get a channel display configuration.
@@ -667,14 +681,16 @@ class sr830:
             ratio type CH1: 0 = none, 1 = Aux in 1, 2 = Aux in 2;
             ratio type CH2: 0 = none, 1 = Aux in 2, 2 = Aux in 4
         """
-        resp = self.instr.write(f"DDEF? {channel}")
+        cmd = f"DDEF? {channel}"
+        resp = self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         display, ratio = resp.split(",")
         if channel == 1:
             return self.display_ch1[int(display)], self.ratio_ch1[(int(ratio))]
         elif channel == 2:
             return self.display_ch2[int(display)], self.ratio_ch2[(int(ratio))]
 
-    def set_front_outp(self, channel, output=0):
+    def set_front_output(self, channel, output=0):
         """Set front panel output sources.
 
         Parameters
@@ -685,9 +701,11 @@ class sr830:
             output quantity CH1: 0 = CH1 display, 1 = X;
             output quantity CH2: 0 = CH2 display, 1 = Y;
         """
-        self.instr.write(f"FPOP {channel}, {output}")
+        cmd = f"FPOP {channel}, {output}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
-    def get_front_outp(self, channel):
+    def get_front_output(self, channel):
         """Get front panel output sources.
 
         Parameters
@@ -701,7 +719,9 @@ class sr830:
             output quantity CH1: 0 = CH1 display, 1 = X;
             output quantity CH2: 0 = CH2 display, 1 = Y;
         """
-        output = int(self.instr.query(f"FPOP? {channel}"))
+        cmd = f"FPOP? {channel}"
+        output = int(self.instr.query(cmd))
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if channel == 1:
             if output == 0:
                 return "CH1 display"
@@ -731,7 +751,9 @@ class sr830:
         expand : int
             0 = no expand, 1 = 10, 2 = 100
         """
-        self.instr.write(f"OEXP {parameter}, {offset}, {expand}")
+        cmd = f"OEXP {parameter}, {offset}, {expand}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_output_offset_expand(self, parameter):
         """Get the output offsets and expands.
@@ -748,7 +770,9 @@ class sr830:
         expand : int
             0 = no expand, 1 = 10, 2 = 100
         """
-        resp = self.instr.query(f"OEXP? {parameter}")
+        cmd = f"OEXP? {parameter}"
+        resp = self.instr.query(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         offset, expand = resp.split(",")
         offset = float(offset)
         expand = int(expand)
@@ -769,38 +793,44 @@ class sr830:
         parameter : int
             1 = X, 2 = Y, 3 = R
         """
-        self.instr.write(f"AOFF {parameter}")
+        cmd = f"AOFF {parameter}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     # --- Aux input and output commands ---
 
-    def get_aux_in(self, input):
+    def get_aux_in(self, aux_in):
         """Get voltage of auxiliary input.
 
         Parameter
         ---------
-        input : int
+        aux_in : int
             auxiliary input (1-4)
         """
-        return float(self.instr.query(f"OAUX? {input}"))
+        cmd = f"OAUX? {aux_in}"
+        logger.info(f"{self.serial_number} \'{cmd}\'")
+        return float(self.instr.query(cmd))
 
-    def set_aux_out(self, output, voltage):
+    def set_aux_out(self, aux_out, voltage):
         """Set voltage of auxiliary output.
 
         Parameters
         ----------
-        output : int
+        aux_out : int
             auxiliary output (1-4)
         voltage : float
             output voltage, -10.500 =< voltage =< 10.500
         """
-        self.instr.write(f"AUXV {output}, {voltage}")
+        cmd = f"AUXV {aux_out}, {voltage}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
-    def get_aux_out(self, output):
+    def get_aux_out(self, aux_out):
         """Get voltage of auxiliary output.
 
         Parameters
         ----------
-        output : int
+        aux_out : int
             auxiliary output (1-4)
 
         Returns
@@ -808,7 +838,9 @@ class sr830:
         voltage : float
             output voltage, -10.500 =< voltage =< 10.500
         """
-        return float(self.instr.query(f"AUXV? {output}"))
+        cmd = f"AUXV? {aux_out}"
+        return float(self.instr.query(cmd))
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     # --- Setup commands ---
 
@@ -823,7 +855,9 @@ class sr830:
         interface : int
             0 = RS232, 1 = GPIB
         """
-        self.instr.write(f"OUTX {interface}")
+        cmd = f"OUTX {interface}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_output_interface(self):
         """Get the output communication interface.
@@ -833,7 +867,9 @@ class sr830:
         interface : int
             0 = RS232, 1 = GPIB
         """
-        interface = int(self.instr.query(f"OUTX?"))
+        cmd = f"OUTX?"
+        interface = int(self.instr.query(cmd))
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if interface == 0:
             return "RS232"
         elif interface == 1:
@@ -852,7 +888,9 @@ class sr830:
         status : int
             front panel behaviour: 0 = normal, 1 = front panel enabled
         """
-        self.instr.write(f"OVRM {status}")
+        cmd = f"OVRM {status}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def set_key_click(self, status):
         """Set key click status.
@@ -862,7 +900,9 @@ class sr830:
         status : int
             0 = off, 1 = on
         """
-        self.instr.write(f"KCLK {status}")
+        cmd = f"KCLK {status}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_key_click(self):
         """Get key click status.
@@ -872,7 +912,9 @@ class sr830:
         status : int
             0 = off, 1 = on
         """
-        status = int(self.instr.query(f"KCLK?"))
+        cmd = f"KCLK?"
+        status = int(self.instr.query(cmd))
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if status == 0:
             return "off"
         elif status == 1:
@@ -888,7 +930,9 @@ class sr830:
         status : int
             0 = off, 1 = on
         """
-        self.instr.write(f"ALRM {status}")
+        cmd = f"ALRM {status}"
+        self.instr.write(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def get_alarm(self):
         """Get alarm status.
@@ -898,7 +942,9 @@ class sr830:
         status : int
             0 = off, 1 = on
         """
-        status = int(self.instr.query(f"ALRM?"))
+        cmd = f"ALRM?"
+        status = int(self.instr.query(cmd))
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         if status == 0:
             return "off"
         elif status == 1:
@@ -914,6 +960,8 @@ class sr830:
         number : int
             buffer number
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"SSET {number}")
 
     def recall_setup(self, number):
@@ -924,22 +972,30 @@ class sr830:
         number : int
             buffer number
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"RSET {number}")
 
     # --- Auto functions ---
 
     def auto_gain(self):
         """Automatically set gain."""
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"AGAN")
         # TODO: add read serial poll byte
 
     def auto_reserve(self):
         """Automatically set reserve."""
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"ARSV")
         # TODO: add read serial poll byte
 
     def auto_phase(self):
         """Automatically set phase."""
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"APHS")
         # TODO: add query phase shift to determine completion
 
@@ -971,6 +1027,8 @@ class sr830:
         rate : int
             sample rate in Hz: see table above for mapping
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"SRAT {rate}")
 
     def get_sample_rate(self):
@@ -998,6 +1056,8 @@ class sr830:
         rate : float or str
             sample rate in Hz: see table above for mapping
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return self.sample_rates[int(self.instr.query(f"SRAT?"))]
 
     def set_end_of_buffer_mode(self, mode):
@@ -1011,6 +1071,8 @@ class sr830:
         mode : int
             end of buffer mode: 0 = 1 Shot, 1 = Loop
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"SEND {mode}")
 
     def get_end_of_buffer_mode(self):
@@ -1021,10 +1083,14 @@ class sr830:
         mode : int
             end of buffer mode: 0 = 1 Shot, 1 = Loop
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return self.end_of_buffer_modes[int(self.instr.query(f"SEND?"))]
 
     def trigger(self):
         """Send software trigger."""
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"TRIG")
 
     def set_trigger_start_mode(self, mode):
@@ -1035,6 +1101,8 @@ class sr830:
         mode : int
             trigger start mode: 0 = Off, 1 = Start scan
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"TSTR {mode}")
 
     def get_trigger_start_mode(self):
@@ -1045,6 +1113,8 @@ class sr830:
         mode : int
             trigger start mode: 0 = Off, 1 = Start scan
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return self.trigger_start_modes[int(self.instr.query(f"TSTR?"))]
 
     def start(self):
@@ -1052,6 +1122,8 @@ class sr830:
 
         Ignored if storage already in progress.
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"STRT")
 
     def pause(self):
@@ -1059,6 +1131,8 @@ class sr830:
 
         Ignored if storage is already paused or reset.
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"PAUS")
 
     def reset_data_buffers(self):
@@ -1066,6 +1140,8 @@ class sr830:
 
         This command will erase the data buffer.
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"REST")
 
     # --- Data transfer commands ---
@@ -1083,6 +1159,8 @@ class sr830:
         value : float
             value of measured parameter
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return float(self.instr.query(f"OUTP? {parameter}"))
 
     def read_display(self, channel):
@@ -1098,6 +1176,8 @@ class sr830:
         value : float
             displayed value in display units
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return float(self.instr.query(f"OUTR? {channel}"))
 
     def measure_multiple(self, parameters):
@@ -1138,6 +1218,8 @@ class sr830:
         values : tuple of float
             values of measured parameters
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         parameters = ",".join([str(i) for i in parameters])
         values = self.instr.query(f"SNAP? {parameters}").split(",")
         return (float(i) for i in values)
@@ -1155,6 +1237,8 @@ class sr830:
         voltage : float
             auxiliary input voltage
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return float(self.instr.query(f"OAUX? {aux_in}"))
 
     def get_buffer_size(self):
@@ -1165,6 +1249,8 @@ class sr830:
         N : int
             number of points in the buffer
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return int(self.instr.query(f"SPTS?"))
 
     def get_ascii_buffer_data(self, channel, start_bin, bins):
@@ -1194,6 +1280,8 @@ class sr830:
         buffer : tuple of float
             data stored in buffer range
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         cmd = f"TRCA? {channel},{start_bin},{bins}"
 
         # pause storage if loop mode
@@ -1207,7 +1295,7 @@ class sr830:
         if buffer_mode == "Loop":
             self.set_end_of_buffer_mode(mode=1)
 
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
         return buffer
 
@@ -1238,6 +1326,8 @@ class sr830:
         buffer : tuple of float
             data stored in buffer range
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         cmd = f"TRCB? {channel},{start_bin},{bins}"
 
         if self.instr.interface_type == 4:
@@ -1267,7 +1357,7 @@ class sr830:
         if buffer_mode == "Loop":
             self.set_end_of_buffer_mode(mode=1)
 
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
         return buffer
 
@@ -1299,6 +1389,8 @@ class sr830:
         buffer : tuple of float
             data stored in buffer range
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         # TODO: fix formatting
         buffer = self.instr.query(f"TRCL? {channel},{start_bin},{bins}").split(",")
         pass
@@ -1311,6 +1403,8 @@ class sr830:
         mode : str
             0 = Off, 1 = On (DOS), 2 = On (Windows)
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"FAST {mode}")
 
     def get_data_transfer_mode(self):
@@ -1321,6 +1415,8 @@ class sr830:
         mode : str
             0 = Off, 1 = On (DOS), 2 = On (Windows)
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return self.data_transfer_modes[int(self.instr.query(f"FAST?"))]
 
     def start_scan(self):
@@ -1332,6 +1428,8 @@ class sr830:
         the first data points are transmitted. Do not use the STRT
         command to start the scan.
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"STRD")
 
     # --- Interface commands ---
@@ -1339,13 +1437,15 @@ class sr830:
 
     def reset(self):
         """Reset the instrument to the default configuration."""
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"*RST")
 
     def get_idn(self):
         """Get the identity string."""
         cmd = f"*IDN?"
         self.instr.write(cmd)
-        logger.info(cmd)
+        logger.info(f"{self.serial_number} \'{cmd}\'")
 
     def set_local_mode(self, local):
         """Set the local/remote function.
@@ -1355,6 +1455,8 @@ class sr830:
         local : int
             0 = Local, 1 = Remote, 2 = Local lockout
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"LOCL {local}")
 
     def get_local_mode(self):
@@ -1365,6 +1467,8 @@ class sr830:
         local : int
             0 = Local, 1 = Remote, 2 = Local lockout
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return self.local_modes[int(self.instr.query("LOCL?"))]
 
     def set_gpib_overide_remote(self, condition):
@@ -1375,6 +1479,8 @@ class sr830:
         condition : int
             GPIB overide remote condition: 0 = No, 1 = Yes
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write(f"OVRM {condition}")
 
     def get_gpib_overide_remote(self):
@@ -1385,6 +1491,8 @@ class sr830:
         condition : int
             GPIB overide remote condition: 0 = No, 1 = Yes
         """
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         return self.gpib_overide_remote_conditions[int(self.instr.write(f"OVRM?"))]
 
     # --- Status reporting commands ---
@@ -1392,6 +1500,8 @@ class sr830:
 
     def clear_status_registers(self):
         """Clear all status registers."""
+        cmd =
+        logger.info(f"{self.serial_number} \'{cmd}\'")
         self.instr.write("*CLS")
 
 
