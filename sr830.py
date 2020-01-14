@@ -1,8 +1,11 @@
 """Stanford Research Systems SR830 lock-in amplifier (LIA) control library."""
+
 import logging
 import sys
 
 import visa
+
+rm = visa.ResourceManager()
 
 
 class sr830:
@@ -99,7 +102,6 @@ class sr830:
 
     def __init__(self, addr, timeout=10000):
         """Open VISA resource for instr."""
-        rm = visa.ResourceManager()
         self.instr = rm.open_resource(addr)
         self.instr.timeout = timeout
         self.get_idn()
