@@ -4,8 +4,6 @@ The full instrument manual, including the programming guide, can be found at
 https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf.
 """
 
-import sys
-
 import visa
 
 rm = visa.ResourceManager()
@@ -26,7 +24,8 @@ class sr830:
     corresponding integer (of type int) can optionally be returned. Internally, valid
     instrument parameters in human readable format are stored in tuples as class
     variables. The index of a parameter in a tuple is its corresponding integer value
-    used by the instrument.
+    used by the instrument. These variables be useful to read but should never be
+    overwritten.
 
     Method return format
     --------------------
@@ -35,11 +34,13 @@ class sr830:
         * "cmd" : command sent to the instrument
         * "resp" : raw response from the instrument
         * "fmt_resp" : response formatted as a useful Python type
-        * "err_code" : error code
-        * "err_msg" : corresponding error message
+        * "warning" : programmer warning
+        * "error" : error status returned by instrument
 
     This enables a calling script to implement logging independently of this library.
     """
+
+    # --- class variables ---
 
     reference_sources = ("external", "internal")
 
