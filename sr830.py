@@ -269,7 +269,12 @@ class sr830:
     ]
 
     def __init__(
-        self, address, output_interface, timeout=10000, return_int=False, err_check=True
+        self,
+        address="",
+        output_interface=0,
+        timeout=10000,
+        return_int=False,
+        err_check=True,
     ):
         """Initialise VISA resource for instrument.
 
@@ -305,13 +310,12 @@ class sr830:
         err_check : bool, optional
             Automatically read instrument error state after command writes/queries.
         """
-        self.instr = rm.open_resource(address)
-        self.instr.timeout = timeout
+        self.address = address
+        self.timeout = timeout
+        self.output_interface = output_interface
         # TODO: add return_int option to methods, make sure docstrings are consistent
         self.return_int = return_int
         self.err_check = err_check
-        self.set_output_interface(output_interface)
-        self._add_idn()
 
     def _add_idn(self):
         """Add identity info attributes from identity string."""
@@ -321,6 +325,13 @@ class sr830:
         self.model = idn[1]
         self.serial_number = idn[2]
         self.firmware_version = idn[3]
+
+    def connect(self):
+        """Conntect to instrument."""
+        self.instr = rm.open_resource(self.address)
+        self.instr.timeout = self.timeout
+        self.set_output_interface(self.output_interface)
+        self._add_idn()
 
     # --- Reference and phase commands ---
 
