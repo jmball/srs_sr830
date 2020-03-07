@@ -331,6 +331,7 @@ class sr830:
         self.instr = rm.open_resource(self.address)
         self.instr.timeout = self.timeout
         self.set_output_interface(self.output_interface)
+        self.set_local_mode(1)
         self._add_idn()
 
     # --- Reference and phase commands ---
