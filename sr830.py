@@ -471,7 +471,7 @@ class sr830:
         Parameters
         ----------
         harmonic : int
-            detection harmonic, 1 =< harmonic =< 19999
+            Detection harmonic, 1 =< harmonic =< 19999.
         """
         cmd = f"HARM {harmonic}"
         self.instr.write(cmd)
@@ -914,7 +914,7 @@ class sr830:
             Ratio type for CH2: 
                 
                 * 0 : none
-                * 1 : Aux In 2
+                * 1 : Aux In 3
                 * 2 : Aux In 4
         """
         cmd = f"DDEF {channel}, {display}, {ratio}"
