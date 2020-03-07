@@ -270,7 +270,7 @@ class sr830:
 
     def __init__(
         self,
-        address="",
+        address,
         output_interface=0,
         timeout=10000,
         return_int=False,
