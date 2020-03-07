@@ -334,6 +334,10 @@ class sr830:
         self.set_local_mode(1)
         self._add_idn()
 
+    def disconnect(self):
+        """Disconntect instrument."""
+        self.instr.close()
+
     # --- Reference and phase commands ---
 
     def set_ref_phase_shift(self, phase_shift, err_check=self.err_check):
