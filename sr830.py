@@ -285,6 +285,7 @@ class sr830:
         self.timeout = timeout
         self.output_interface = output_interface
         # TODO: add return_int option to methods, make sure docstrings are consistent
+        # TODO: Add reset to factory default arg
         self.return_int = return_int
 
     def _add_idn(self):
@@ -1429,7 +1430,8 @@ class sr830:
         """
         cmd = f"OUTP? {parameter}"
         value = self.instr.query(cmd)
-        value = float(value.decode("ascii"))
+        # value = float(value.decode("ascii"))
+        value = float(value)
         return value
 
     def read_display(self, channel):
