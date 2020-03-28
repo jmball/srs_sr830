@@ -190,10 +190,10 @@ class sr830:
     _serial_poll_status_byte = [
         ["", "Input queue overflow"],
         ["", ""],
-        ["", "Output queue overflow",],
-        ["", "",],
+        ["", "Output queue overflow"],
+        ["", ""],
         ["", "Command cannot execute/parameter out of range"],
-        ["", "Received illegal command",],
+        ["", "Received illegal command"],
         ["", "Key pressed/knob rotated"],
         ["", "Power-on"],
     ]
@@ -247,14 +247,14 @@ class sr830:
 
         Parameters
         ----------
-        address: str
+        address : str
             Full VISA resource address, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc.
-        return_int: bool, optional
+        return_int : bool, optional
             The raw instrument response to a parameter query where the parameter values
             are elements of a limited set is an integer that maps to a human-readable
-            value. If return_int is 'True', the raw integer is returned by the query
-            method. If return_int is 'False', the human-readable value that the integer
-            maps to is returned by the query method.
+            value. If True, the raw integer is returned by the query method. If False,
+            the human-readable value that the integer maps to is returned by the query
+            method.
         """
         self.address = address
         self.return_int = return_int
@@ -273,13 +273,13 @@ class sr830:
 
         Parameters
         ----------
-        local_lockout: bool, optional
-            If 'True' all front panel keys are disabled, including the 'Local' key. If
-            'False' all keys except the 'Local' key are disabled, which the user may
+        local_lockout : bool, optional
+            If True all front panel keys are disabled, including the 'Local' key. If
+            False all keys except the 'Local' key are disabled, which the user may
             press to manually return the instrument to local control.
-        timeout: int or float, optional
+        timeout : int or float, optional
             Communication timeout in ms.
-        output_interface: {0, 1}, optional
+        output_interface : {0, 1}, optional
             Communication interface on the lock-in amplifier rear panel used to read
             instrument responses. This does not need to match the VISA resource
             interface type if, for example, an interface adapter is used between the
@@ -327,7 +327,7 @@ class sr830:
 
         Parameters
         ----------
-        reset: bool, optional
+        reset : bool, optional
             Reset the instrument to the default configuration.
         input_configuration : {0, 1, 2, 3}
             Input configuration:
@@ -2032,7 +2032,8 @@ class sr830:
         """Get the device identification string.
 
         The string is in the format "Stanford_Research_Systems,SR830,s/n00111,ver1.000",
-        where, for example, the serial number is 00111 and the firmware version is 1.000.
+        where, for example, the serial number is 00111 and the firmware version is
+        1.000.
 
         Returns
         -------
@@ -2162,7 +2163,7 @@ class sr830:
             Enable register to get.
         bit : None or {0-7}, optional
             Specific bit to query. If `None`, query entire byte.
-        
+
         Returns
         -------
         value : int
