@@ -241,24 +241,22 @@ class sr830:
         ["", "Internal math error"],
     ]
 
-    def __init__(
-        self, address, output_interface=0, timeout=10000, return_int=False,
-    ):
+    def __init__(self, return_int=False, check_errors=True):
         """Initialise VISA resource for instrument.
 
         Parameters
         ----------
-        address : str
-            Full VISA resource address, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc.
         return_int : bool, optional
             The raw instrument response to a parameter query where the parameter values
             are elements of a limited set is an integer that maps to a human-readable
             value. If True, the raw integer is returned by the query method. If False,
             the human-readable value that the integer maps to is returned by the query
             method.
+        check_errors : bool, optional
+            Check instrument error status after every command.
         """
-        self.address = address
         self.return_int = return_int
+        self.check_errors = check_errors
 
     def _add_idn(self):
         """Add identity info attributes from identity string."""
@@ -269,15 +267,20 @@ class sr830:
         self.serial_number = idn[2]
         self.firmware_version = idn[3]
 
-    def connect(self, local_lockout=False, timeout=10000, output_interface=0):
+    def connect(
+        self,
+        resource_name,
+        timeout=10000,
+        output_interface=0,
+        set_default_configuration=True,
+        local_lockout=False,
+    ):
         """Conntect to the instrument.
 
         Parameters
         ----------
-        local_lockout : bool, optional
-            If True all front panel keys are disabled, including the 'Local' key. If
-            False all keys except the 'Local' key are disabled, which the user may
-            press to manually return the instrument to local control.
+        resource_name : str
+            Full VISA resource name, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc.
         timeout : int or float, optional
             Communication timeout in ms.
         output_interface : {0, 1}, optional
@@ -288,8 +291,16 @@ class sr830:
 
                 * 0 : RS232
                 * 1 : GPIB
+
+        set_default_configuration : bool, optional
+            If True, set all configuration settings to defaults defined in
+            `set_configuraiton` method.
+        local_lockout : bool, optional
+            If True all front panel keys are disabled, including the 'Local' key. If
+            False all keys except the 'Local' key are disabled, which the user may
+            press to manually return the instrument to local control.
         """
-        self.instr = rm.open_resource(self.address)
+        self.instr = rm.open_resource(resource_name)
         self.instr.timeout = timeout
         self.set_output_interface(output_interface)
         if local_lockout is True:
@@ -297,6 +308,8 @@ class sr830:
         else:
             self.set_local_mode(1)
         self._add_idn()
+        if set_default_configuration is True:
+            self.set_configuration()
 
     def disconnect(self):
         """Disconntect the instrument after returning to local mode."""
