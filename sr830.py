@@ -249,17 +249,6 @@ class sr830:
         ----------
         address: str
             Full VISA resource address, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc.
-        output_interface: {0, 1}, optional
-            Communication interface on the lock-in amplifier rear panel used to read
-            instrument responses. This does not need to match the VISA resource
-            interface type if, for example, an interface adapter is used between the
-            control computer and the instrument. Valid output communication interfaces:
-
-                * 0 : RS232
-                * 1 : GPIB
-
-        timeout: int or float, optional
-            Communication timeout in ms.
         return_int: bool, optional
             The raw instrument response to a parameter query where the parameter values
             are elements of a limited set is an integer that maps to a human-readable
@@ -268,9 +257,6 @@ class sr830:
             maps to is returned by the query method.
         """
         self.address = address
-        self.timeout = timeout
-        self.output_interface = output_interface
-        # TODO: Add reset to factory default arg
         self.return_int = return_int
 
     def _add_idn(self):
@@ -282,17 +268,301 @@ class sr830:
         self.serial_number = idn[2]
         self.firmware_version = idn[3]
 
-    def connect(self):
-        """Conntect to instrument."""
+    def connect(self, local_lockout=False, timeout=10000, output_interface=0):
+        """Conntect to the instrument.
+
+        Parameters
+        ----------
+        local_lockout: bool, optional
+            If 'True' all front panel keys are disabled, including the 'Local' key. If
+            'False' all keys except the 'Local' key are disabled, which the user may
+            press to manually return the instrument to local control.
+        timeout: int or float, optional
+            Communication timeout in ms.
+        output_interface: {0, 1}, optional
+            Communication interface on the lock-in amplifier rear panel used to read
+            instrument responses. This does not need to match the VISA resource
+            interface type if, for example, an interface adapter is used between the
+            control computer and the instrument. Valid output communication interfaces:
+
+                * 0 : RS232
+                * 1 : GPIB
+        """
         self.instr = rm.open_resource(self.address)
-        self.instr.timeout = self.timeout
-        self.set_output_interface(self.output_interface)
-        self.set_local_mode(1)
+        self.instr.timeout = timeout
+        self.set_output_interface(output_interface)
+        if local_lockout is True:
+            self.set_local_mode(2)
+        else:
+            self.set_local_mode(1)
         self._add_idn()
 
     def disconnect(self):
-        """Disconntect instrument."""
+        """Disconntect the instrument after returning to local mode."""
+        self.set_local_mode(0)
         self.instr.close()
+
+    def set_configuration(
+        self,
+        reset=True,
+        input_configuration=0,
+        input_coupling=0,
+        ground_shielding=1,
+        line_notch_filter_status=3,
+        ref_source=0,
+        detection_harmonic=1,
+        ref_trigger=1,
+        ref_freq=1000,
+        sensitivity=26,
+        reserve_mode=1,
+        time_constant=8,
+        low_pass_filter_slope=1,
+        sync_status=0,
+        ch1_display=1,
+        ch2_display=1,
+        ch1_ratio=0,
+        ch2_ratio=0,
+    ):
+        """Set the instrument configuration.
+
+        Parameters
+        ----------
+        reset: bool, optional
+            Reset the instrument to the default configuration.
+        input_configuration : {0, 1, 2, 3}
+            Input configuration:
+
+                * 0 : A
+                * 1 : A-B
+                * 2 : I (1 MOhm)
+                * 3 : I (100 MOhm)
+
+        input_coupling : {0, 1}
+            Input coupling:
+
+                * 0 : AC
+                * 1 : DC
+
+        ground_shielding : {0, 1}
+            Input shield grounding:
+
+                * 0 : Float
+                * 1 : Ground
+
+        line_notch_filter_status : {0, 1, 2, 3}
+            Input line notch filter status:
+
+                * 0 : no filters
+                * 1 : Line notch in
+                * 2 : 2 x Line notch in
+                * 3 : Both notch filters in
+
+        ref_source : {0, 1}
+            Refernce source:
+
+                * 0 : external
+                * 1 : internal
+
+        detection_harmonic : int
+            Detection harmonic, 1 =< harmonic =< 19999.
+        ref_trigger : {0, 1, 2}
+            Trigger type:
+
+                * 0: zero crossing
+                * 1: TTL rising egde
+                * 2: TTL falling edge
+
+        ref_freq : float
+            Frequency in Hz, 0.001 =< freq =< 102000.
+        sensitivity : {0 - 26}
+            Sensitivity in V/uA:
+
+                * 0 : 2e-9
+                * 1 : 5e-9
+                * 2 : 10e-9
+                * 3 : 20e-9
+                * 4 : 50e-9
+                * 5 : 100e-9
+                * 6 : 200e-9
+                * 7 : 500e-9
+                * 8 : 1e-6
+                * 9 : 2e-6
+                * 10 : 5e-6
+                * 11 : 10e-6
+                * 12 : 20e-6
+                * 13 : 50e-6
+                * 14 : 100e-6
+                * 15 : 200e-6
+                * 16 : 500e-6
+                * 17 : 1e-3
+                * 18 : 2e-3
+                * 19 : 5e-3
+                * 20 : 10e-3
+                * 21 : 20e-3
+                * 22 : 50e-3
+                * 23 : 100e-3
+                * 24 : 200e-3
+                * 25 : 500e-3
+                * 26 : 1
+
+        reserve_mode : {0, 1, 2}
+            Reserve mode:
+
+                * 0 : High reserve
+                * 1 : Normal
+                * 2 : Low noise
+
+        time_constant : {0 - 19}
+            Time constant in s:
+
+                * 0 : 10e-6
+                * 1 : 30e-6
+                * 2 : 100e-6
+                * 3 : 300e-6
+                * 4 : 1e-3
+                * 5 : 3e-3
+                * 6 : 10e-3
+                * 7 : 30e-3
+                * 8 : 100e-3
+                * 9 : 300e-3
+                * 10 : 1
+                * 11 : 3
+                * 12 : 10
+                * 13 : 30
+                * 14 : 100
+                * 15 : 300
+                * 16 : 1e3
+                * 17 : 3e3
+                * 18 : 10e3
+                * 19 : 30e3
+
+        low_pass_filter_slope : {0, 1, 2, 3}
+            Low pass filter slope in dB/oct:
+
+                * 0 : 6
+                * 1 : 12
+                * 2 : 18
+                * 3 : 24
+
+        sync_status : {0, 1}
+            Synchronous filter status:
+
+                * 0 : Off
+                * 1 : below 200 Hz
+
+        ch1_display : {0, 1, 2, 3, 4}
+            Display parameter for CH1:
+
+                * 0 : X
+                * 1 : R
+                * 2 : X Noise
+                * 3 : Aux In 1
+                * 4 : Aux In 2
+
+        ch2_display : {0, 1, 2, 3, 4}
+            Display parameter for CH2:
+
+                * 0 : Y
+                * 1 : Phase
+                * 2 : Y Noise
+                * 3 : Aux In 3
+                * 4 : Aux In 4
+
+        ch1_ratio : {0, 1, 2}
+            Ratio type for CH1:
+
+                * 0 : none
+                * 1 : Aux In 1
+                * 2 : Aux In 2
+
+        ch2_ratio : {0, 1, 2}
+            Ratio type for CH1:
+
+                * 0 : none
+                * 1 : Aux In 3
+                * 2 : Aux In 4
+        """
+        if reset is True:
+            self.reset()
+        self.set_input_configuration(input_configuration)
+        self.set_input_coupling(input_coupling)
+        self.set_input_shield_gnd(ground_shielding)
+        self.set_line_notch_status(line_notch_filter_status)
+        self.set_ref_source(ref_source)
+        self.set_harmonic(detection_harmonic)
+        self.set_reference_trigger(ref_trigger)
+        self.set_ref_freq(ref_freq)
+        self.set_sensitivity(sensitivity)
+        self.set_reserve_mode(reserve_mode)
+        self.set_time_constant(time_constant)
+        self.set_lp_filter_slope(low_pass_filter_slope)
+        self.set_sync_status(sync_status)
+        self.set_display(1, ch1_display, ch1_ratio)
+        self.set_display(2, ch2_display, ch2_ratio)
+
+    def get_configuration(self):
+        """Get the instrument configuration.
+
+        Returns
+        -------
+        configuration : dict
+            Configuration dictionary with the following keys:
+
+                * input_configuration
+                * input_coupling
+                * ground_shielding
+                * line_notch_filter_status
+                * ref_source
+                * detection_harmonic
+                * ref_trigger
+                * ref_freq
+                * sensitivity
+                * reserve_mode
+                * time_constant
+                * low_pass_filter_slope
+                * sync_status
+                * ch1_display
+                * ch2_display
+                * ch1_ratio
+                * ch2_ratio
+        """
+        input_configuration = self.get_input_configuration()
+        input_coupling = self.get_input_coupling()
+        ground_shielding = self.get_input_shield_gnd()
+        line_notch_filter_status = self.get_line_notch_status()
+        ref_source = self.get_ref_source()
+        detection_harmonic = self.get_harmonic()
+        ref_trigger = self.get_reference_trigger()
+        ref_freq = self.get_ref_freq()
+        sensitivity = self.get_sensitivity()
+        reserve_mode = self.get_reserve_mode()
+        time_constant = self.get_time_constant()
+        low_pass_filter_slope = self.get_low_pass_filter_slope()
+        sync_status = self.get_sync_status()
+        ch1_display, ch1_ratio = self.get_display(1)
+        ch2_display, ch2_ratio = self.get_display(2)
+
+        configuration = {
+            "input_configuration": input_configuration,
+            "input_coupling": input_coupling,
+            "ground_shielding": ground_shielding,
+            "line_notch_filter_status": line_notch_filter_status,
+            "ref_source": ref_source,
+            "detection_harmonic": detection_harmonic,
+            "ref_trigger": ref_trigger,
+            "ref_freq": ref_freq,
+            "sensitivity": sensitivity,
+            "reserve_mode": reserve_mode,
+            "time_constant": time_constant,
+            "low_pass_filter_slope": low_pass_filter_slope,
+            "sync_status": sync_status,
+            "ch1_display": ch1_display,
+            "ch1_ratio": ch1_ratio,
+            "ch2_display": ch2_display,
+            "ch2_ratio": ch2_ratio,
+        }
+
+        return configuration
 
     # --- Reference and phase commands ---
 
@@ -505,7 +775,7 @@ class sr830:
         cmd = f"IGND {grounding}"
         self.instr.write(cmd)
 
-    def get_input_shield_gnd(self, grounding):
+    def get_input_shield_gnd(self):
         """Get input shield grounding.
 
         Returns
@@ -571,7 +841,7 @@ class sr830:
         cmd = f"ILIN {status}"
         self.instr.write(cmd)
 
-    def get_line_notch_status(self, status):
+    def get_line_notch_status(self):
         """Get input line notch filter status.
 
         Returns
@@ -793,7 +1063,7 @@ class sr830:
         cmd = f"OFSL {slope}"
         self.instr.write(cmd)
 
-    def get_lp_filter_slope(self):
+    def get_low_pass_filter_slope(self):
         """Get the low pass filter slope.
 
         Parameters
@@ -827,7 +1097,7 @@ class sr830:
         cmd = f"SYNC {status}"
         self.instr.write(cmd)
 
-    def get_sync_status(self, status):
+    def get_sync_status(self):
         """Get synchronous filter status.
 
         Returns
