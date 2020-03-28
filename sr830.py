@@ -1102,8 +1102,7 @@ class sr830:
             Auxiliary input voltage.
         """
         cmd = f"OAUX? {aux_in}"
-        voltage = self.instr.query(cmd)
-        voltage = float(voltage.decode("ascii"))
+        voltage = float(self.instr.query(cmd))
         return voltage
 
     def set_aux_out(self, aux_out, voltage):
@@ -1476,9 +1475,7 @@ class sr830:
             Value of measured parameter in volts or degrees.
         """
         cmd = f"OUTP? {parameter}"
-        value = self.instr.query(cmd)
-        # value = float(value.decode("ascii"))
-        value = float(value)
+        value = float(self.instr.query(cmd))
         return value
 
     def read_display(self, channel):
@@ -1498,8 +1495,7 @@ class sr830:
             Displayed value in display units.
         """
         cmd = f"OUTR? {channel}"
-        value = self.instr.query(cmd)
-        value = float(value.decode("ascii"))
+        value = float(self.instr.query(cmd))
         return value
 
     def measure_multiple(self, parameters):
@@ -1558,8 +1554,7 @@ class sr830:
             Auxiliary input voltage.
         """
         cmd = f"OAUX? {aux_in}"
-        voltage = self.instr.query(cmd)
-        voltage = float(voltage.decode("ascii"))
+        voltage = float(self.instr.query(cmd))
         return voltage
 
     def get_buffer_size(self):
