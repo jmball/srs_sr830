@@ -1912,13 +1912,13 @@ class sr830:
         warning = ""
 
         output_interface = self.get_output_interface()
-        if output_interface == "RS232":
+        if (output_interface == "RS232") or (output_interface == 0):
             # TODO: When using the RS232 interface, the word length must be 8 bits
             expect_termination = False
             warning = (
                 f"SRS recommends not using binary transfers over serial interfaces."
             )
-        elif output_interface == "GPIB":
+        elif (output_interface == "GPIB") or (output_interface == 1):
             expect_termination = True
 
         # pause storage if loop mode
@@ -2140,17 +2140,15 @@ class sr830:
             if (value >= 0) & (value <= 255):
                 cmd = f"{self._enable_register_cmd_dict[register]} {value}"
             else:
-                raise (
-                    ValueError,
-                    f"{value} is out of range. Must be in range 0-255 if decimal.",
+                raise ValueError(
+                    f"{value} is out of range. Must be in range 0-255 if decimal."
                 )
         else:
             if (bit >= 0) & (bit <= 7) & ((value == 0) or (value == 1)):
                 cmd = f"{self._enable_register_cmd_dict[register]} {bit},{value}"
             else:
-                raise (
-                    ValueError,
-                    f"Bit: {bit}, or Value: {value} is out of range. Bit must in range 0-7 and value must be 0 or 1 if value is not decimal.",
+                raise ValueError(
+                    f"Bit: {bit}, or Value: {value} is out of range. Bit must in range 0-7 and value must be 0 or 1 if value is not decimal."
                 )
         self.instr.write(cmd)
 
@@ -2175,9 +2173,8 @@ class sr830:
             if (bit >= 0) & (bit <= 7):
                 cmd = f"{self._enable_register_cmd_dict[register]}? {bit}"
             else:
-                raise (
-                    ValueError,
-                    f"{bit} is out of range. Bit must be in range 0-7 if specified.",
+                raise ValueError(
+                    f"{bit} is out of range. Bit must be in range 0-7 if specified."
                 )
         resp = self.instr.query(cmd)
         value = int(resp)
@@ -2204,9 +2201,8 @@ class sr830:
             if (bit >= 0) & (bit <= 7):
                 cmd = f"{self._status_byte_cmd_dict[status_byte]} {bit}"
             else:
-                raise (
-                    ValueError,
-                    f"{bit} is out of range. Bit must be in range 0-7 if specified.",
+                raise ValueError(
+                    f"{bit} is out of range. Bit must be in range 0-7 if specified."
                 )
         resp = self.instr.query(cmd)
         value = int(resp)
