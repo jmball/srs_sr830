@@ -10,23 +10,7 @@ rm = visa.ResourceManager()
 
 
 class sr830:
-    """Stanford Research Systems SR830 LIA instrument.
-
-    Command parameters
-    ------------------
-    Some instrument commands and responses map parameter values to integers. For
-    example, to set the sensitivity to 10e-9 V/um the argument of the command
-    string sent to the instrument should be 2; the instrument response string to the
-    parameter query is an integer corresponding to a human readable sensitivity.
-    When setting the value of parameter, the integer mapping the value should be
-    provided as the argument to the function. However, when reading/getting the value
-    of a parameter either the human readable version (of type str, default) or
-    corresponding integer (of type int) can optionally be returned. Internally, valid
-    instrument parameters in human readable format are stored in tuples as class
-    variables. The index of a parameter in a tuple is its corresponding integer value
-    used by the instrument. These variables be useful to read but should never be
-    overwritten.
-    """
+    """Stanford Research Systems SR830 LIA instrument."""
 
     # --- class variables ---
 
@@ -265,7 +249,7 @@ class sr830:
         ----------
         address: str
             Full VISA resource address, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc.
-        output_interface: {0, 1}
+        output_interface: {0, 1}, optional
             Communication interface on the lock-in amplifier rear panel used to read
             instrument responses. This does not need to match the VISA resource
             interface type if, for example, an interface adapter is used between the
@@ -277,14 +261,15 @@ class sr830:
         timeout: int or float, optional
             Communication timeout in ms.
         return_int: bool, optional
-            When instrument response strings for a parameter are integers corresponding
-            to a value, choose whether to return the integer (True) or the human
-            readable value (False).
+            The raw instrument response to a parameter query where the parameter values
+            are elements of a limited set is an integer that maps to a human-readable
+            value. If return_int is 'True', the raw integer is returned by the query
+            method. If return_int is 'False', the human-readable value that the integer
+            maps to is returned by the query method.
         """
         self.address = address
         self.timeout = timeout
         self.output_interface = output_interface
-        # TODO: add return_int option to methods, make sure docstrings are consistent
         # TODO: Add reset to factory default arg
         self.return_int = return_int
 
@@ -360,8 +345,11 @@ class sr830:
                 * 1 : internal
         """
         cmd = f"FMOD?"
-        source = self.reference_sources[int(self.instr.query(cmd))]
-        return source
+        source = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return source
+        else:
+            return self.reference_sources[source]
 
     def set_ref_freq(self, freq):
         """Set the frequency of the internal oscillator.
@@ -415,8 +403,11 @@ class sr830:
                 * 2: TTL falling edge
         """
         cmd = f"RSLP?"
-        trigger = self.triggers[int(self.instr.query(cmd))]
-        return trigger
+        trigger = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return trigger
+        else:
+            return self.triggers[trigger]
 
     def set_harmonic(self, harmonic):
         """Set detection harmonic.
@@ -494,8 +485,11 @@ class sr830:
                 * 3 : I (100 MOhm)
         """
         cmd = f"ISRC?"
-        config = self.input_configurations[int(self.instr.query(cmd))]
-        return config
+        config = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return config
+        else:
+            return self.input_configurations[config]
 
     def set_input_shield_gnd(self, grounding):
         """Set input shield grounding.
@@ -523,8 +517,11 @@ class sr830:
                 * 1 : Ground
         """
         cmd = f"IGND?"
-        grounding = self.groundings[int(self.instr.query(cmd))]
-        return grounding
+        grounding = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return grounding
+        else:
+            return self.groundings[grounding]
 
     def set_input_coupling(self, coupling):
         """Set input coupling.
@@ -552,8 +549,11 @@ class sr830:
                 * 1 : DC
         """
         cmd = f"ICPL?"
-        coupling = self.input_couplings[int(self.instr.query(cmd))]
-        return coupling
+        coupling = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return coupling
+        else:
+            return self.input_couplings[coupling]
 
     def set_line_notch_status(self, status):
         """Set input line notch filter status.
@@ -585,8 +585,11 @@ class sr830:
                 * 3 : Both notch filters in
         """
         cmd = f"ILIN?"
-        status = self.input_line_notch_filter_statuses[int(self.instr.query(cmd))]
-        return status
+        status = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return status
+        else:
+            return self.input_line_notch_filter_statuses[status]
 
     # --- Gain and time constant commands ---
 
@@ -666,8 +669,11 @@ class sr830:
                 * 26 : 1
         """
         cmd = f"SENS?"
-        sensitivity = self.sensitivities[int(self.instr.query(cmd))]
-        return sensitivity
+        sensitivity = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return sensitivity
+        else:
+            return self.sensitivities[sensitivity]
 
     def set_reserve_mode(self, mode):
         """Set reserve mode.
@@ -697,8 +703,11 @@ class sr830:
                 * 2 : Low noise
         """
         cmd = f"RMOD?"
-        mode = self.reserve_modes[int(self.instr.query(cmd))]
-        return mode
+        mode = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return mode
+        else:
+            self.reserve_modes[mode]
 
     def set_time_constant(self, tc):
         """Set time constant.
@@ -762,8 +771,11 @@ class sr830:
                 * 19 : 30e3
         """
         cmd = f"OFLT?"
-        tc = self.time_constants[int(self.instr.query(cmd))]
-        return tc
+        tc = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return tc
+        else:
+            return self.time_constants[tc]
 
     def set_lp_filter_slope(self, slope):
         """Set the low pass filter slope.
@@ -795,8 +807,11 @@ class sr830:
                 * 3 : 24
         """
         cmd = f"OFSL?"
-        slope = self.low_pass_filter_slopes[int(self.instr.query(cmd))]
-        return slope
+        slope = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return slope
+        else:
+            return self.low_pass_filter_slopes[slope]
 
     def set_sync_status(self, status):
         """Set synchronous filter status.
@@ -824,8 +839,11 @@ class sr830:
                 * 1 : below 200 Hz
         """
         cmd = f"SYNC?"
-        status = self.synchronous_filter_statuses[int(self.instr.query(cmd))]
-        return status
+        status = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return status
+        else:
+            return self.synchronous_filter_statuses[status]
 
     # --- Display and output commands ---
 
@@ -919,12 +937,17 @@ class sr830:
         cmd = f"DDEF? {channel}"
         resp = self.instr.write(cmd)
         display, ratio = resp.split(",")
-        if channel == 1:
-            return self.display_ch1[int(display)], self.ratio_ch1[(int(ratio))]
-        elif channel == 2:
-            return self.display_ch2[int(display)], self.ratio_ch2[(int(ratio))]
+        display = int(display)
+        ratio = int(ratio)
+        if self.return_int is True:
+            return display, ratio
         else:
-            raise ValueError(f"Invalid channel, {channel}")
+            if channel == 1:
+                return self.display_ch1[display], self.ratio_ch1[ratio]
+            elif channel == 2:
+                return self.display_ch2[display], self.ratio_ch2[ratio]
+            else:
+                raise ValueError(f"Invalid channel, {channel}")
 
     def set_front_output(self, channel, output=0):
         """Set front panel output sources.
@@ -933,18 +956,18 @@ class sr830:
         ----------
         channel : {1, 2}
             Channel:
-                
+
                 * 1 : CH1
                 * 2 : CH2
 
         output : {0, 1}
             Output quantity for CH1:
-            
+
                 * 0 : CH1 display
                 * 1 : X
 
             Output quantity for CH2:
-            
+
                 * 0 : CH2 display
                 * 1 : Y
         """
@@ -958,7 +981,7 @@ class sr830:
         ----------
         channel : {1, 2}
             Channel:
-                
+
                 * 1 : CH1
                 * 2 : CH2
 
@@ -966,23 +989,26 @@ class sr830:
         -------
         output : {0, 1}
             Output quantity for CH1:
-            
+
                 * 0 : CH1 display
                 * 1 : X
 
             Output quantity for CH2:
-            
+
                 * 0 : CH2 display
                 * 1 : Y
         """
         cmd = f"FPOP? {channel}"
         output = int(self.instr.query(cmd))
-        if channel == 1:
-            return self.front_panel_output_sources_ch1[output]
-        elif channel == 2:
-            return self.front_panel_output_sources_ch2[output]
+        if self.return_int is True:
+            return output
         else:
-            raise ValueError(f"Invalid channel, {channel}")
+            if channel == 1:
+                return self.front_panel_output_sources_ch1[output]
+            elif channel == 2:
+                return self.front_panel_output_sources_ch2[output]
+            else:
+                raise ValueError(f"Invalid channel, {channel}")
 
     def set_output_offset_expand(self, parameter, offset, expand):
         """Set the output offsets and expands.
@@ -993,7 +1019,7 @@ class sr830:
         ----------
         parameter : {1, 2, 3}
             Measurement parameter:
-            
+
                 * 1 : X
                 * 2 : Y
                 * 3 : R
@@ -1017,7 +1043,7 @@ class sr830:
         ----------
         parameter : {1, 2, 3}
             Measurement parameter:
-            
+
                 * 1 : X
                 * 2 : Y
                 * 3 : R
@@ -1037,8 +1063,11 @@ class sr830:
         resp = self.instr.query(cmd)
         offset, expand = resp.split(",")
         offset = float(offset)
-        expand = self.expands[int(expand)]
-        return offset, expand
+        expand = int(expand)
+        if self.return_int is True:
+            return offset, expand
+        else:
+            return offset, self.expands[expand]
 
     def auto_offset(self, parameter):
         """Set parameter offset to zero.
@@ -1047,7 +1076,7 @@ class sr830:
         ----------
         parameter : {1, 2, 3}
             Measurement parameter:
-            
+
                 * 1 : X
                 * 2 : Y
                 * 3 : R
@@ -1066,7 +1095,7 @@ class sr830:
         ---------
         aux_in : {1, 2, 3, 4}
             Auxiliary input (1, 2, 3, or 4).
-        
+
         Returns
         -------
         voltage : float
@@ -1119,7 +1148,7 @@ class sr830:
         ----------
         interface : {0, 1}
             Output communication interface:
-                
+
                 * 0 : RS232
                 * 1 : GPIB
         """
@@ -1133,13 +1162,16 @@ class sr830:
         -------
         interface : {0, 1}
             Output communication interface:
-                
+
                 * 0 : RS232
                 * 1 : GPIB
         """
         cmd = f"OUTX?"
-        interface = self.communication_interfaces[int(self.instr.query(cmd))]
-        return interface
+        interface = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return interface
+        else:
+            return self.communication_interfaces[interface]
 
     def set_remote_status(self, status):
         """Set the remote status.
@@ -1151,7 +1183,7 @@ class sr830:
         ----------
         status : {0, 1}
             Front panel behaviour:
-                
+
                 * 0 : normal
                 * 1 : front panel activated
         """
@@ -1165,7 +1197,7 @@ class sr830:
         ----------
         state : {0, 1}
             Key click state:
-                
+
                 * 0 : Off
                 * 1 : On
         """
@@ -1184,8 +1216,11 @@ class sr830:
                 * 1 : On
         """
         cmd = f"KCLK?"
-        state = self.key_click_states[int(self.instr.query(cmd))]
-        return state
+        state = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return state
+        else:
+            return self.key_click_states[state]
 
     def set_alarm(self, status):
         """Set the alarm status.
@@ -1194,7 +1229,7 @@ class sr830:
         ----------
         status : {0, 1}
             Alarm status:
-            
+
                 * 0 : Off
                 * 1 : On
         """
@@ -1213,8 +1248,11 @@ class sr830:
                 * 1 : On
         """
         cmd = f"ALRM?"
-        status = self.alarm_statuses[int(self.instr.query(cmd))]
-        return status
+        status = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return status
+        else:
+            return self.alarm_statuses[status]
 
     def save_setup(self, number):
         """Save the lock-in setup in a settings buffer.
@@ -1315,8 +1353,11 @@ class sr830:
                 * 14 : Trigger
         """
         cmd = f"SRAT?"
-        rate = self.sample_rates[int(self.instr.query(cmd))]
-        return rate
+        rate = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return rate
+        else:
+            return self.sample_rates[rate]
 
     def set_end_of_buffer_mode(self, mode):
         """Set the end of buffer mode.
@@ -1347,8 +1388,11 @@ class sr830:
                 * 1 : Loop
         """
         cmd = f"SEND?"
-        mode = self.end_of_buffer_modes[int(self.instr.query(cmd))]
-        return mode
+        mode = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return mode
+        else:
+            return self.end_of_buffer_modes[mode]
 
     def trigger(self):
         """Send software trigger."""
@@ -1381,8 +1425,11 @@ class sr830:
                 * 1 : Start scan
         """
         cmd = f"TSTR?"
-        mode = self.trigger_start_modes[int(self.instr.query(cmd))]
-        return mode
+        mode = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return mode
+        else:
+            return self.trigger_start_modes[mode]
 
     def start(self):
         """Start or resume data storage.
@@ -1692,8 +1739,11 @@ class sr830:
                 * 2 : On (Windows)
         """
         cmd = f"FAST?"
-        mode = self.data_transfer_modes[int(self.instr.query(cmd))]
-        return mode
+        mode = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return mode
+        else:
+            return self.data_transfer_modes[mode]
 
     def start_scan(self):
         """Start scan.
@@ -1756,8 +1806,11 @@ class sr830:
                 * 2 : LOCAL LOCKOUT
         """
         cmd = "LOCL?"
-        local = self.local_modes[int(self.instr.query(cmd))]
-        return local
+        local = int(self.instr.query(cmd))
+        if self.return_int is True:
+            return local
+        else:
+            return self.local_modes[local]
 
     def set_gpib_overide_remote(self, condition):
         """Set the GPIB overide remote condition.
@@ -1785,8 +1838,11 @@ class sr830:
                 * 1 : Yes
         """
         cmd = f"OVRM?"
-        condition = self.gpib_overide_remote_conditions[int(self.instr.write(cmd))]
-        return condition
+        condition = int(self.instr.write(cmd))
+        if self.return_int is True:
+            return condition
+        else:
+            return self.gpib_overide_remote_conditions[condition]
 
     # --- Status reporting commands ---
     # These functions don't have an option for error checking after a command is sent
@@ -1919,4 +1975,3 @@ class sr830:
         resp = self.instr.query(cmd)
         value = int(resp)
         return value
-
