@@ -3,6 +3,7 @@
 The full instrument manual, including the programming guide, can be found at
 https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf.
 """
+import warnings
 
 import visa
 
@@ -1554,19 +1555,31 @@ class sr830:
         """
         cmd = f"AGAN"
         self.instr.write(cmd)
-        # TODO: add read serial poll byte
+
+        # poll serial poll status byte to determine whether execution in progress
+        ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        while ifc != 1:
+            ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
     def auto_reserve(self):
         """Automatically set reserve."""
         cmd = f"ARSV"
         self.instr.write(cmd)
-        # TODO: add read serial poll byte
+
+        # poll serial poll status byte to determine whether execution in progress
+        ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        while ifc != 1:
+            ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
     def auto_phase(self):
         """Automatically set phase."""
         cmd = f"APHS"
         self.instr.write(cmd)
-        # TODO: add query phase shift to determine completion
+
+        # poll serial poll status byte to determine whether execution in progress
+        ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        while ifc != 1:
+            ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
     # --- Data storage commands ---
 
@@ -1909,13 +1922,11 @@ class sr830:
             Data stored in buffer range.
         """
         cmd = f"TRCB? {channel},{start_bin},{bins}"
-        warning = ""
 
         output_interface = self.get_output_interface()
         if (output_interface == "RS232") or (output_interface == 0):
-            # TODO: When using the RS232 interface, the word length must be 8 bits
             expect_termination = False
-            warning = (
+            warnings.warn(
                 f"SRS recommends not using binary transfers over serial interfaces."
             )
         elif (output_interface == "GPIB") or (output_interface == 1):
@@ -1926,10 +1937,9 @@ class sr830:
         if buffer_mode == "Loop":
             self.pause()
 
-        # TODO: When using GPIB, make sure that the software is configured to NOT
-        # terminate reading upon receipt of a CR or LF
         buffer = self.instr.query_binary_values(
             cmd,
+            datatype="f",
             container=tuple(),
             expect_termination=expect_termination,
             data_points=bins,
@@ -1970,8 +1980,43 @@ class sr830:
             Data stored in buffer range.
         """
         cmd = f"TRCL? {channel},{start_bin},{bins}"
-        # TODO: fix formatting
-        buffer = self.instr.query(cmd).split(",")
+
+        output_interface = self.get_output_interface()
+        if (output_interface == "RS232") or (output_interface == 0):
+            expect_termination = False
+            warnings.warn(
+                f"SRS recommends not using binary transfers over serial interfaces."
+            )
+        elif (output_interface == "GPIB") or (output_interface == 1):
+            expect_termination = True
+
+        # pause storage if loop mode
+        buffer_mode = self.get_end_of_buffer_mode()
+        if buffer_mode == "Loop":
+            self.pause()
+
+        # Although each value requires 4 bytes to be represented, read bytes into array
+        # 2 at time for later formatting, i.e. datatype is 'h' (short). Also, therefore
+        # read twice as many 2-byte values as 4-byte bins.
+        buffer = self.instr.query_binary_values(
+            cmd,
+            datatype="h",
+            is_big_endian=False,
+            container=list(),
+            expect_termination=expect_termination,
+            data_points=2 * bins,
+        )
+
+        # Convert raw byte array into array of floats using SR830 format
+        mantissa_buffer = buffer[::2]
+        exp_buffer = buffer[1::2]
+        buffer = [m * 2 ** (e - 124) for m, e in zip(mantissa_buffer, exp_buffer)]
+        buffer = tuple(buffer)
+
+        # restart loop storage if previously set
+        if buffer_mode == "Loop":
+            self.set_end_of_buffer_mode(mode=1)
+
         return buffer
 
     def set_data_transfer_mode(self, mode):
@@ -2021,7 +2066,6 @@ class sr830:
         self.instr.write(cmd)
 
     # --- Interface commands ---
-    # TODO: check differences between RS232 and GPIB. PyVISA might provide GPIB.
 
     def reset(self):
         """Reset the instrument to the default configuration."""
@@ -2188,7 +2232,7 @@ class sr830:
         status_byte : {"standard_event", "serial_poll", "error", "lia"}
             Status byte to get.
         bit : None or {0-7}, optional
-            Specific bit to set with a binary value. If `None` query entire byte.
+            Specific bit to get with a binary value. If `None` query entire byte.
 
         Returns
         -------
@@ -2204,9 +2248,7 @@ class sr830:
                 raise ValueError(
                     f"{bit} is out of range. Bit must be in range 0-7 if specified."
                 )
-        resp = self.instr.query(cmd)
-        value = int(resp)
-        return value
+        return int(self.instr.query(cmd))
 
     def set_power_on_status_clear_bit(self, value):
         """Set the power-on status clear bit.
