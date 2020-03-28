@@ -1211,7 +1211,7 @@ class sr830:
         -------
         state : {0, 1}
             Key click state:
-                
+
                 * 0 : Off
                 * 1 : On
         """
@@ -1243,7 +1243,7 @@ class sr830:
         -------
         status : {0, 1}
             Alarm status:
-            
+
                 * 0 : Off
                 * 1 : On
         """
@@ -1280,7 +1280,7 @@ class sr830:
 
     def auto_gain(self):
         """Automatically set the gain.
-        
+
         Does nothing if the time constant is greater than 1 second.
         """
         cmd = f"AGAN"
@@ -1369,7 +1369,7 @@ class sr830:
         ----------
         mode : {0, 1}
             End of buffer mode:
-                
+
                 * 0 : 1 Shot
                 * 1 : Loop
         """
@@ -1383,7 +1383,7 @@ class sr830:
         ----------
         mode : {0, 1} or str
             End of buffer mode:
-                
+
                 * 0 : 1 Shot
                 * 1 : Loop
         """
@@ -1406,7 +1406,7 @@ class sr830:
         ----------
         mode : {0, 1}
             Trigger start mode:
-            
+
                 * 0 : Off
                 * 1 : Start scan
         """
@@ -1420,7 +1420,7 @@ class sr830:
         -------
         mode : {0, 1} or str
             Trigger start mode:
-            
+
                 * 0 : Off
                 * 1 : Start scan
         """
@@ -1464,7 +1464,7 @@ class sr830:
         ----------
         parameter : {1, 2, 3, 4}
             Measured parameter:
-            
+
                 * 1 : X
                 * 2 : Y
                 * 3 : R
@@ -1488,7 +1488,7 @@ class sr830:
         ----------
         channel : {1, 2}
             Channel display to read:
-                
+
                 * 1 : CH1
                 * 2 : CH2
 
@@ -1718,7 +1718,7 @@ class sr830:
         ----------
         mode : {0, 1, 2}
             Data transfer mode:
-                
+
                 * 0 : Off
                 * 1 : On (DOS)
                 * 2 : On (Windows)
@@ -1733,7 +1733,7 @@ class sr830:
         -------
         mode : {0, 1, 2}
             Data transfer mode:
-                
+
                 * 0 : Off
                 * 1 : On (DOS)
                 * 2 : On (Windows)
@@ -1768,7 +1768,7 @@ class sr830:
 
         The string is in the format "Stanford_Research_Systems,SR830,s/n00111,ver1.000",
         where, for example, the serial number is 00111 and the firmware version is 1.000.
-        
+
         Returns
         -------
         idn : str
@@ -1819,7 +1819,7 @@ class sr830:
         ----------
         condition : int
             GPIB overide remote condition:
-                
+
                 * 0 : No
                 * 1 : Yes
         """
@@ -1833,7 +1833,7 @@ class sr830:
         -------
         condition : int
             GPIB overide remote condition:
-                
+
                 * 0 : No
                 * 1 : Yes
         """
@@ -1926,7 +1926,7 @@ class sr830:
             Status byte to get.
         bit : None or {0-7}, optional
             Specific bit to set with a binary value. If `None` query entire byte.
-        
+
         Returns
         -------
         value : int
@@ -1965,7 +1965,7 @@ class sr830:
 
     def get_power_on_status_clear_bit(self):
         """Get the power-on status clear bit.
-        
+
         Returns
         -------
         value : int
