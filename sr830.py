@@ -3,9 +3,15 @@
 The full instrument manual, including the programming guide, can be found at
 https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf.
 """
+import logging
 import warnings
 
 import visa
+
+
+logging.captureWarnings(True)
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 rm = visa.ResourceManager()
 
@@ -2529,7 +2535,7 @@ class sr830:
                 cmd = f"{self._enable_register_cmd_dict[register]} {value}"
             else:
                 raise ValueError(
-                    f"{value} is out of range. Must be in range 0-255 if decimal."
+                    f"Value: {value} is out of range. Must be in range 0-255 if decimal."
                 )
         else:
             if (bit >= 0) & (bit <= 7) & ((value == 0) or (value == 1)):
