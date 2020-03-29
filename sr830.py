@@ -253,7 +253,7 @@ class sr830:
     ]
 
     def __init__(self, return_int=False, check_errors=True):
-        """Initialise VISA resource for instrument.
+        """Initialise object.
 
         Parameters
         ----------
@@ -296,7 +296,7 @@ class sr830:
 
                 * 0 : RS232
                 * 1 : GPIB
-                
+
         reset : bool, optional
             Reset the instrument to the built-in default configuration.
         set_default_configuration : bool, optional
