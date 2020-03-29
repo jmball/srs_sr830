@@ -266,11 +266,11 @@ class sr830:
     def connect(
         self,
         resource_name,
-        timeout=10000,
         reset=True,
         output_interface=0,
         set_default_configuration=True,
         local_lockout=False,
+        **resource_kwargs,
     ):
         """Conntect to the instrument.
 
@@ -278,8 +278,6 @@ class sr830:
         ----------
         resource_name : str
             Full VISA resource name, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc.
-        timeout : int or float, optional
-            Communication timeout in ms.
         reset : bool, optional
             Reset the instrument to the built-in default configuration.
         output_interface : {0, 1}, optional
@@ -294,15 +292,17 @@ class sr830:
                 * 1 : GPIB
 
         set_default_configuration : bool, optional
-            If True, set all configuration settings to defaults defined in
+            If True, set all configuration settings to defaults defined in the
             `set_configuraiton` method.
         local_lockout : bool, optional
             If True all front panel keys are disabled, including the 'Local' key. If
             False all keys except the 'Local' key are disabled, which the user may
             press to manually return the instrument to local control.
+        resource_kwargs : dict
+            Keyword arguments to be used to change instrument attributes after
+            construction.
         """
-        self.instr = rm.open_resource(resource_name)
-        self.instr.timeout = timeout
+        self.instr = rm.open_resource(resource_name, **resource_kwargs)
         if reset is True:
             self.reset()
         self.enable_all_status_bytes()
@@ -317,7 +317,6 @@ class sr830:
 
     def disconnect(self):
         """Disconnect the instrument after returning to local mode."""
-        # return instrument to manual mode then close resource
         self.set_local_mode(0)
         self.instr.close()
 
