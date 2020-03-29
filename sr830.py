@@ -272,8 +272,8 @@ class sr830:
     def connect(
         self,
         resource_name,
+        output_interface,
         reset=True,
-        output_interface=0,
         set_default_configuration=True,
         local_lockout=False,
         **resource_kwargs,
@@ -286,9 +286,7 @@ class sr830:
             Full VISA resource name, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc. See
             https://pyvisa.readthedocs.io/en/latest/introduction/names.html for more
             info on correct formatting for resource names.
-        reset : bool, optional
-            Reset the instrument to the built-in default configuration.
-        output_interface : {0, 1}, optional
+        output_interface : {0, 1}
             Communication interface on the lock-in amplifier rear panel used to read
             instrument responses. Although the SR830 can read commands from both
             interfaces at any time, it can only send responses over one. This does not
@@ -298,7 +296,9 @@ class sr830:
 
                 * 0 : RS232
                 * 1 : GPIB
-
+                
+        reset : bool, optional
+            Reset the instrument to the built-in default configuration.
         set_default_configuration : bool, optional
             If True, set all configuration settings to defaults defined in the
             `set_configuraiton` method.

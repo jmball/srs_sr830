@@ -15,7 +15,8 @@ logging.basicConfig(
 logger = logging.getLogger()
 
 # instantiate object
-instr = sr830.sr830(address="ASRL2::INSTR", output_interface=0)
+instr = sr830.sr830()
+instr.connect(resource_name="ASRL2::INSTR", output_interface=0)
 
 # log device info
 sn = instr.serial_number
@@ -24,14 +25,8 @@ logger.info(
 )
 
 # query something and log formatted response
-resp_dict = instr.get_ref_freq()
-freq = resp_dict["fmt_resp"]
+freq = instr.get_ref_freq()
 logger.info(f"{sn}, ref frequency = {freq} Hz")
 
-# log query, response, and error info
-logger.debug(
-    f"{sn}, cmd: {resp_dict['cmd']}, resp: {resp_dict['resp']}, err_code: {resp_dict['err_code']}, err_msg: {resp_dict['err_msg']}"
-)
-
 # close VISA resource
-instr.instr.close()
+instr.disconnect()
