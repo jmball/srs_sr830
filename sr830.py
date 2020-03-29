@@ -11,7 +11,12 @@ rm = visa.ResourceManager()
 
 
 class sr830:
-    """Stanford Research Systems SR830 LIA instrument."""
+    """Stanford Research Systems SR830 LIA instrument.
+
+    Use the `connect()` method to open a connection to the instrument and instantiate
+    the VISA resource attribute `instr` for an sr830 instance. This attribute can be
+    used to access all of the PyVISA attributes and methods for the resource.
+    """
 
     # --- class variables ---
 
@@ -144,7 +149,7 @@ class sr830:
     _enable_register_cmd_dict = {
         "standard_event": "*ESE",
         "serial_poll": "*SRE",
-        "error_status": "ERRE",
+        "error": "ERRE",
         "lia_status": "LIAE",
     }
 
@@ -188,7 +193,7 @@ class sr830:
         "URQ",
         "PON",
     ]
-    _serial_poll_status_byte = [
+    _standard_event_status_byte = [
         ["", "Input queue overflow"],
         ["", ""],
         ["", "Output queue overflow"],
@@ -258,19 +263,11 @@ class sr830:
         self.return_int = return_int
         self.check_errors = check_errors
 
-    def _add_idn(self):
-        """Add identity info attributes from identity string."""
-        idn = self.get_id()
-        idn = idn.split(",")
-        self.manufacturer = idn[0]
-        self.model = idn[1]
-        self.serial_number = idn[2]
-        self.firmware_version = idn[3]
-
     def connect(
         self,
         resource_name,
         timeout=10000,
+        reset=True,
         output_interface=0,
         set_default_configuration=True,
         local_lockout=False,
@@ -283,11 +280,15 @@ class sr830:
             Full VISA resource name, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc.
         timeout : int or float, optional
             Communication timeout in ms.
+        reset : bool, optional
+            Reset the instrument to the built-in default configuration.
         output_interface : {0, 1}, optional
             Communication interface on the lock-in amplifier rear panel used to read
-            instrument responses. This does not need to match the VISA resource
-            interface type if, for example, an interface adapter is used between the
-            control computer and the instrument. Valid output communication interfaces:
+            instrument responses. Although the SR830 can read commands from both
+            interfaces at any time, it can only send responses over one. This does not
+            need to match the VISA resource interface type if, for example, an
+            interface adapter is used between the control computer and the instrument.
+            Valid output communication interfaces:
 
                 * 0 : RS232
                 * 1 : GPIB
@@ -302,23 +303,35 @@ class sr830:
         """
         self.instr = rm.open_resource(resource_name)
         self.instr.timeout = timeout
-        self.set_output_interface(output_interface)
+        if reset is True:
+            self.reset()
+        self.enable_all_status_bytes()
         if local_lockout is True:
             self.set_local_mode(2)
         else:
             self.set_local_mode(1)
+        self.set_output_interface(output_interface)
         self._add_idn()
         if set_default_configuration is True:
             self.set_configuration()
 
     def disconnect(self):
-        """Disconntect the instrument after returning to local mode."""
+        """Disconnect the instrument after returning to local mode."""
+        # return instrument to manual mode then close resource
         self.set_local_mode(0)
         self.instr.close()
 
+    def _add_idn(self):
+        """Add identity info attributes from identity string."""
+        idn = self.get_id()
+        idn = idn.split(",")
+        self.manufacturer = idn[0]
+        self.model = idn[1]
+        self.serial_number = idn[2]
+        self.firmware_version = idn[3]
+
     def set_configuration(
         self,
-        reset=True,
         input_configuration=0,
         input_coupling=0,
         ground_shielding=1,
@@ -341,8 +354,6 @@ class sr830:
 
         Parameters
         ----------
-        reset : bool, optional
-            Reset the instrument to the default configuration.
         input_configuration : {0, 1, 2, 3}
             Input configuration:
 
@@ -496,8 +507,6 @@ class sr830:
                 * 1 : Aux In 3
                 * 2 : Aux In 4
         """
-        if reset is True:
-            self.reset()
         self.set_input_configuration(input_configuration)
         self.set_input_coupling(input_coupling)
         self.set_input_shield_gnd(ground_shielding)
@@ -578,6 +587,51 @@ class sr830:
 
         return configuration
 
+    def enable_all_status_bytes(self):
+        """Enable all status bytes."""
+        registers = ["standard_event", "serial_poll", "error", "lia_status"]
+        for register in registers:
+            self.set_enable_register(register, 255, decimal=True)
+
+    def error_check(self):
+        """Check for errors."""
+        sp = self.get_status_byte("serial_poll")
+        sp = format(sp, "b")
+        errors = []
+
+        # check if the interface output buffer is non-empty
+        if sp[4] == "1":
+            errors.append(self._serial_poll_status_byte[4][1])
+
+        # if any bits in error status byte are enabled check if they constitute an error
+        if sp[2] == "1":
+            esb = self.get_status_byte("error")
+            esb = format(esb, "b")
+            for i, bit in enumerate(esb):
+                if bit == "1":
+                    errors.append(self._error_status_byte[i][1])
+
+        # if any bits in LIA status byte are enabled check if they constitute an error
+        if sp[3] == "1":
+            lsb = self.get_status_byte("lia")
+            lsb = format(lsb, "b")
+            for i, bit in enumerate(lsb[:4]):
+                if bit == "1":
+                    errors.append(self._lia_status_byte[i][1])
+
+        # if any bits in standard event status byte are enabled check if they
+        # constitute an error
+        if sp[5] == "1":
+            sesb = self.get_status_byte("standard_event")
+            sesb = format(sesb, "b")
+            sesb_error_bits = [0, 2, 4, 5]
+            for i in sesb_error_bits:
+                if sesb[i] == "1":
+                    errors.append(self._standard_event_status_byte[i][1])
+
+        if len(errors) != 0:
+            warnings.warn(f"Instrument reported errors: {', '.join(errors)}.")
+
     # --- Reference and phase commands ---
 
     def set_ref_phase_shift(self, phase_shift):
@@ -591,6 +645,9 @@ class sr830:
         cmd = f"PHAS {phase_shift}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_ref_phase_shift(self):
         """Get the reference phase shift.
 
@@ -601,6 +658,10 @@ class sr830:
         """
         cmd = f"PHAS?"
         phase_shift = float(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return phase_shift
 
     def set_ref_source(self, source):
@@ -617,6 +678,9 @@ class sr830:
         cmd = f"FMOD {source}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_ref_source(self):
         """Get the reference source.
 
@@ -630,6 +694,10 @@ class sr830:
         """
         cmd = f"FMOD?"
         source = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return source
         else:
@@ -646,6 +714,9 @@ class sr830:
         cmd = f"FREQ {freq}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_ref_freq(self):
         """Get the reference frequency.
 
@@ -655,8 +726,11 @@ class sr830:
             Frequency in Hz, 0.001 =< freq =< 102000.
         """
         cmd = f"FREQ?"
-        resp = self.instr.query(cmd)
-        freq = float(resp)
+        freq = float(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return freq
 
     def set_reference_trigger(self, trigger):
@@ -674,6 +748,9 @@ class sr830:
         cmd = f"RSLP {trigger}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_reference_trigger(self):
         """Get the reference trigger type when using external ref.
 
@@ -688,6 +765,10 @@ class sr830:
         """
         cmd = f"RSLP?"
         trigger = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return trigger
         else:
@@ -704,6 +785,9 @@ class sr830:
         cmd = f"HARM {harmonic}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_harmonic(self):
         """Get detection harmonic.
 
@@ -714,6 +798,10 @@ class sr830:
         """
         cmd = f"HARM?"
         harmonic = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return harmonic
 
     def set_sine_amplitude(self, amplitude):
@@ -727,6 +815,9 @@ class sr830:
         cmd = f"SLVL {amplitude}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_sine_amplitude(self):
         """Get the amplitude of the sine output.
 
@@ -737,6 +828,10 @@ class sr830:
         """
         cmd = f"SLVL?"
         amplitude = float(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return amplitude
 
     def set_input_configuration(self, config):
@@ -755,6 +850,9 @@ class sr830:
         cmd = f"ISRC {config}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_input_configuration(self):
         """Set the input configuration.
 
@@ -770,6 +868,10 @@ class sr830:
         """
         cmd = f"ISRC?"
         config = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return config
         else:
@@ -789,6 +891,9 @@ class sr830:
         cmd = f"IGND {grounding}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_input_shield_gnd(self):
         """Get input shield grounding.
 
@@ -802,6 +907,10 @@ class sr830:
         """
         cmd = f"IGND?"
         grounding = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return grounding
         else:
@@ -821,6 +930,9 @@ class sr830:
         cmd = f"ICPL {coupling}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_input_coupling(self):
         """Get input coupling.
 
@@ -834,6 +946,10 @@ class sr830:
         """
         cmd = f"ICPL?"
         coupling = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return coupling
         else:
@@ -855,6 +971,9 @@ class sr830:
         cmd = f"ILIN {status}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_line_notch_status(self):
         """Get input line notch filter status.
 
@@ -870,6 +989,10 @@ class sr830:
         """
         cmd = f"ILIN?"
         status = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return status
         else:
@@ -916,6 +1039,9 @@ class sr830:
         cmd = f"SENS {sensitivity}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_sensitivity(self):
         """Get sensitivity.
 
@@ -954,6 +1080,10 @@ class sr830:
         """
         cmd = f"SENS?"
         sensitivity = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return sensitivity
         else:
@@ -974,6 +1104,9 @@ class sr830:
         cmd = f"RMOD {mode}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_reserve_mode(self):
         """Get reserve mode.
 
@@ -988,6 +1121,10 @@ class sr830:
         """
         cmd = f"RMOD?"
         mode = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return mode
         else:
@@ -1025,6 +1162,9 @@ class sr830:
         cmd = f"OFLT {tc}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_time_constant(self):
         """Get time constant.
 
@@ -1056,6 +1196,10 @@ class sr830:
         """
         cmd = f"OFLT?"
         tc = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return tc
         else:
@@ -1077,6 +1221,9 @@ class sr830:
         cmd = f"OFSL {slope}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_low_pass_filter_slope(self):
         """Get the low pass filter slope.
 
@@ -1092,6 +1239,10 @@ class sr830:
         """
         cmd = f"OFSL?"
         slope = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return slope
         else:
@@ -1111,6 +1262,9 @@ class sr830:
         cmd = f"SYNC {status}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_sync_status(self):
         """Get synchronous filter status.
 
@@ -1124,6 +1278,10 @@ class sr830:
         """
         cmd = f"SYNC?"
         status = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return status
         else:
@@ -1175,6 +1333,9 @@ class sr830:
         cmd = f"DDEF {channel}, {display}, {ratio}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_display(self, channel):
         """Get a channel display configuration.
 
@@ -1223,6 +1384,10 @@ class sr830:
         display, ratio = resp.split(",")
         display = int(display)
         ratio = int(ratio)
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return display, ratio
         else:
@@ -1258,6 +1423,9 @@ class sr830:
         cmd = f"FPOP {channel}, {output}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_front_output(self, channel):
         """Get front panel output sources.
 
@@ -1284,6 +1452,10 @@ class sr830:
         """
         cmd = f"FPOP? {channel}"
         output = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return output
         else:
@@ -1320,6 +1492,9 @@ class sr830:
         cmd = f"OEXP {parameter}, {offset}, {expand}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_output_offset_expand(self, parameter):
         """Get the output offsets and expands.
 
@@ -1348,6 +1523,10 @@ class sr830:
         offset, expand = resp.split(",")
         offset = float(offset)
         expand = int(expand)
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return offset, expand
         else:
@@ -1368,6 +1547,9 @@ class sr830:
         cmd = f"AOFF {parameter}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     # --- Aux input and output commands ---
 
     def get_aux_in(self, aux_in):
@@ -1387,6 +1569,10 @@ class sr830:
         """
         cmd = f"OAUX? {aux_in}"
         voltage = float(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return voltage
 
     def set_aux_out(self, aux_out, voltage):
@@ -1401,6 +1587,9 @@ class sr830:
         """
         cmd = f"AUXV {aux_out}, {voltage}"
         self.instr.write(cmd)
+
+        if self.check_errors is True:
+            self.error_check()
 
     def get_aux_out(self, aux_out):
         """Get voltage of auxiliary output.
@@ -1417,6 +1606,10 @@ class sr830:
         """
         cmd = f"AUXV? {aux_out}"
         voltage = float(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return voltage
 
     # --- Setup commands ---
@@ -1438,6 +1631,9 @@ class sr830:
         cmd = f"OUTX {interface}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_output_interface(self):
         """Get the output communication interface.
 
@@ -1451,6 +1647,10 @@ class sr830:
         """
         cmd = f"OUTX?"
         interface = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return interface
         else:
@@ -1473,6 +1673,9 @@ class sr830:
         cmd = f"OVRM {status}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def set_key_click_state(self, state):
         """Set key click state.
 
@@ -1487,6 +1690,9 @@ class sr830:
         cmd = f"KCLK {state}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_key_click_state(self):
         """Get key click state.
 
@@ -1500,6 +1706,10 @@ class sr830:
         """
         cmd = f"KCLK?"
         state = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return state
         else:
@@ -1519,6 +1729,9 @@ class sr830:
         cmd = f"ALRM {status}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_alarm(self):
         """Get the alarm status.
 
@@ -1532,6 +1745,10 @@ class sr830:
         """
         cmd = f"ALRM?"
         status = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return status
         else:
@@ -1548,6 +1765,9 @@ class sr830:
         cmd = f"SSET {number}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def recall_setup(self, number):
         """Recall lock-in setup from setting buffer.
 
@@ -1558,6 +1778,9 @@ class sr830:
         """
         cmd = f"RSET {number}"
         self.instr.write(cmd)
+
+        if self.check_errors is True:
+            self.error_check()
 
     # --- Auto functions ---
 
@@ -1574,6 +1797,9 @@ class sr830:
         while ifc != 1:
             ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def auto_reserve(self):
         """Automatically set reserve."""
         cmd = f"ARSV"
@@ -1584,6 +1810,9 @@ class sr830:
         while ifc != 1:
             ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def auto_phase(self):
         """Automatically set phase."""
         cmd = f"APHS"
@@ -1593,6 +1822,9 @@ class sr830:
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
         while ifc != 1:
             ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+
+        if self.check_errors is True:
+            self.error_check()
 
     # --- Data storage commands ---
 
@@ -1623,6 +1855,9 @@ class sr830:
         cmd = f"SRAT {rate}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_sample_rate(self):
         """Get the data sample rate.
 
@@ -1649,6 +1884,10 @@ class sr830:
         """
         cmd = f"SRAT?"
         rate = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return rate
         else:
@@ -1671,6 +1910,9 @@ class sr830:
         cmd = f"SEND {mode}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_end_of_buffer_mode(self):
         """Get the end of buffer mode.
 
@@ -1684,6 +1926,10 @@ class sr830:
         """
         cmd = f"SEND?"
         mode = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return mode
         else:
@@ -1693,6 +1939,9 @@ class sr830:
         """Send software trigger."""
         cmd = f"TRIG"
         self.instr.write(cmd)
+
+        if self.check_errors is True:
+            self.error_check()
 
     def set_trigger_start_mode(self, mode):
         """Set the trigger start mode.
@@ -1708,6 +1957,9 @@ class sr830:
         cmd = f"TSTR {mode}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_trigger_start_mode(self):
         """Get the trigger start mode.
 
@@ -1721,6 +1973,10 @@ class sr830:
         """
         cmd = f"TSTR?"
         mode = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return mode
         else:
@@ -1734,6 +1990,9 @@ class sr830:
         cmd = f"STRT"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def pause(self):
         """Pause data storage.
 
@@ -1742,6 +2001,9 @@ class sr830:
         cmd = f"PAUS"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def reset_data_buffers(self):
         """Reset data buffers.
 
@@ -1749,6 +2011,9 @@ class sr830:
         """
         cmd = f"REST"
         self.instr.write(cmd)
+
+        if self.check_errors is True:
+            self.error_check()
 
     # --- Data transfer commands ---
 
@@ -1772,6 +2037,10 @@ class sr830:
         """
         cmd = f"OUTP? {parameter}"
         value = float(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return value
 
     def read_display(self, channel):
@@ -1792,6 +2061,10 @@ class sr830:
         """
         cmd = f"OUTR? {channel}"
         value = float(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return value
 
     def measure_multiple(self, parameters):
@@ -1834,6 +2107,10 @@ class sr830:
         parameters = ",".join([str(i) for i in parameters])
         cmd = f"SNAP? {parameters}"
         values = self.instr.query(cmd).split(",")
+
+        if self.check_errors is True:
+            self.error_check()
+
         return (float(i) for i in values)
 
     def read_aux_in(self, aux_in):
@@ -1851,6 +2128,10 @@ class sr830:
         """
         cmd = f"OAUX? {aux_in}"
         voltage = float(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return voltage
 
     def get_buffer_size(self):
@@ -1863,6 +2144,10 @@ class sr830:
         """
         cmd = f"SPTS?"
         N = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return N
 
     def get_ascii_buffer_data(self, channel, start_bin, bins):
@@ -1900,6 +2185,9 @@ class sr830:
             self.pause()
 
         buffer = self.instr.query_ascii_values(cmd, container=tuple())
+
+        if self.check_errors is True:
+            self.error_check()
 
         # restart loop storage if previously set
         if buffer_mode == "Loop":
@@ -1957,6 +2245,9 @@ class sr830:
             expect_termination=expect_termination,
             data_points=bins,
         )
+
+        if self.check_errors is True:
+            self.error_check()
 
         # restart loop storage if previously set
         if buffer_mode == "Loop":
@@ -2020,6 +2311,9 @@ class sr830:
             data_points=2 * bins,
         )
 
+        if self.check_errors is True:
+            self.error_check()
+
         # Convert raw byte array into array of floats using SR830 format
         mantissa_buffer = buffer[::2]
         exp_buffer = buffer[1::2]
@@ -2049,6 +2343,9 @@ class sr830:
         cmd = f"FAST {mode}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_data_transfer_mode(self):
         """Get the data transfer mode.
 
@@ -2063,6 +2360,10 @@ class sr830:
         """
         cmd = f"FAST?"
         mode = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return mode
         else:
@@ -2078,12 +2379,25 @@ class sr830:
         cmd = f"STRD"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     # --- Interface commands ---
 
     def reset(self):
         """Reset the instrument to the default configuration."""
         cmd = f"*RST"
         self.instr.write(cmd)
+
+        # poll serial poll status byte to determine whether execution in progress
+        # TODO: test if enable status byte registers are set by default. If not, this
+        # won't work
+        ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        while ifc != 1:
+            ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+
+        if self.check_errors is True:
+            self.error_check()
 
     def get_id(self):
         """Get the device identification string.
@@ -2099,6 +2413,10 @@ class sr830:
         """
         cmd = f"*IDN?"
         idn = self.instr.query(cmd)
+
+        if self.check_errors is True:
+            self.error_check()
+
         return idn
 
     def set_local_mode(self, local):
@@ -2116,6 +2434,9 @@ class sr830:
         cmd = f"LOCL {local}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_local_mode(self):
         """Get the local/remote function.
 
@@ -2130,6 +2451,10 @@ class sr830:
         """
         cmd = "LOCL?"
         local = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return local
         else:
@@ -2149,6 +2474,9 @@ class sr830:
         cmd = f"OVRM {condition}"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_gpib_overide_remote(self):
         """Get the GPIB overide remote condition.
 
@@ -2162,27 +2490,31 @@ class sr830:
         """
         cmd = f"OVRM?"
         condition = int(self.instr.write(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         if self.return_int is True:
             return condition
         else:
             return self.gpib_overide_remote_conditions[condition]
 
     # --- Status reporting commands ---
-    # These functions don't have an option for error checking after a command is sent
-    # because their result would be ambiguous. Instead validity is checked within
-    # the functions.
 
     def clear_status_registers(self):
         """Clear all status registers."""
         cmd = "*CLS"
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def set_enable_register(self, register, value, decimal=True, bit=None):
         """Set an enable register.
 
         Parameters
         ----------
-        register : {"standard_event", "serial_poll", "error_status", "lia_status"}
+        register : {"standard_event", "serial_poll", "error", "lia_status"}
             Enable register to set.
         value : {0-255} or {0, 1}
             Value of standard event enable register. If decimal is true, value is in
@@ -2209,12 +2541,15 @@ class sr830:
                 )
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_enable_register(self, register, bit=None):
         """Get the standard event enable register value.
 
         Parameters
         ----------
-        register : {"standard_event", "serial_poll", "error_status", "lia_status"}
+        register : {"standard_event", "serial_poll", "error", "lia_status"}
             Enable register to get.
         bit : None or {0-7}, optional
             Specific bit to query. If `None`, query entire byte.
@@ -2233,12 +2568,17 @@ class sr830:
                 raise ValueError(
                     f"{bit} is out of range. Bit must be in range 0-7 if specified."
                 )
-        resp = self.instr.query(cmd)
-        value = int(resp)
+        value = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return value
 
     def get_status_byte(self, status_byte, bit=None):
         """Get a status byte.
+
+        This function has no error check to avoid infinite recursion.
 
         Parameters
         ----------
@@ -2280,6 +2620,9 @@ class sr830:
             raise ValueError(f'Invalid value "{value}". Value must be 0 or 1.')
         self.instr.write(cmd)
 
+        if self.check_errors is True:
+            self.error_check()
+
     def get_power_on_status_clear_bit(self):
         """Get the power-on status clear bit.
 
@@ -2289,6 +2632,9 @@ class sr830:
             Power-on status clear bit value.
         """
         cmd = f"❊PSC?"
-        resp = self.instr.query(cmd)
-        value = int(resp)
+        value = int(self.instr.query(cmd))
+
+        if self.check_errors is True:
+            self.error_check()
+
         return value
