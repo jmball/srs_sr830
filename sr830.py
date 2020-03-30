@@ -2622,7 +2622,7 @@ class sr830:
                 * 1 : Set, all status and enable registers are cleared on power up.
         """
         if (value == 0) or (value == 1):
-            cmd = f"❊PSC {value}"
+            cmd = f"*PSC {value}"
         else:
             raise ValueError(f'Invalid value "{value}". Value must be 0 or 1.')
         self.instr.write(cmd)
@@ -2638,7 +2638,7 @@ class sr830:
         value : int
             Power-on status clear bit value.
         """
-        cmd = f"❊PSC?"
+        cmd = f"*PSC?"
         value = int(self.instr.query(cmd))
 
         if self.check_errors is True:
