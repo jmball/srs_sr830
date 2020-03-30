@@ -331,7 +331,6 @@ class sr830:
     def _add_idn(self):
         """Add identity info attributes from identity string."""
         idn = self.get_id()
-        idn = idn.split(",")
         self.manufacturer = idn[0]
         self.model = idn[1]
         self.serial_number = idn[2]
@@ -2415,11 +2414,12 @@ class sr830:
 
         Returns
         -------
-        idn : str
-            identification string
+        idn : list
+            List of identification strings consisting of manufacturer, model, serial
+            number, and firmware version number in order.
         """
         cmd = f"*IDN?"
-        idn = self.instr.query(cmd)
+        idn = self.instr.query(cmd).split(",")
 
         if self.check_errors is True:
             self.error_check()
