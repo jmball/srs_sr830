@@ -319,7 +319,7 @@ class sr830:
         else:
             self.set_local_mode(1)
         self.set_output_interface(output_interface)
-        self._add_idn()
+        logger.info(f"{','.join(self.get_id())} connected!")
         if set_default_configuration is True:
             self.set_configuration()
 
@@ -327,14 +327,6 @@ class sr830:
         """Disconnect the instrument after returning to local mode."""
         self.set_local_mode(0)
         self.instr.close()
-
-    def _add_idn(self):
-        """Add identity info attributes from identity string."""
-        idn = self.get_id()
-        self.manufacturer = idn[0]
-        self.model = idn[1]
-        self.serial_number = idn[2]
-        self.firmware_version = idn[3]
 
     def set_configuration(
         self,
