@@ -13,7 +13,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/jmball/srs_sr830",
-    py_modules=["sr830"],
+    py_modules=["sr830", "virtual_sr830"],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT",
