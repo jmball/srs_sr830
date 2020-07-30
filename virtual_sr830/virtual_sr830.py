@@ -1110,7 +1110,7 @@ class sr830:
         #     return sensitivity
         # else:
         #     return self.sensitivities[sensitivity]
-        return 0
+        return 1e-6
 
     def set_reserve_mode(self, mode):
         """Set reserve mode.
@@ -2104,7 +2104,7 @@ class sr830:
         #     self.error_check()
 
         # return value
-        return 0.0
+        return 0.5e-6
 
     def read_display(self, channel):
         """Read the value of a channel display.
@@ -2176,7 +2176,7 @@ class sr830:
         #     self.error_check()
 
         # return (float(i) for i in values)
-        return (0.0 for i in parameters)
+        return (1.0 for i in parameters)
 
     def read_aux_in(self, aux_in):
         """Read an auxiliary input value in volts.
