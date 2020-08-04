@@ -315,11 +315,11 @@ class sr830:
             construction.
         """
         self.instr = rm.open_resource(resource_name, **resource_kwargs)
+        if output_interface == 0:
+            self.instr.read_termination = "\r"
         if reset is True:
             self.reset()
         self.set_output_interface(output_interface)
-        if output_interface == 0:
-            self.instr.read_termination = "\r"
         self.enable_all_status_bytes()
         if local_lockout is True:
             self.set_local_mode(2)
