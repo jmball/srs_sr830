@@ -2396,12 +2396,12 @@ class sr830:
         # poll serial poll status byte to determine whether execution in progress
         # TODO: test if enable status byte registers are set by default. If not, this
         # won't work
-        ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        while ifc != 1:
-            ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        # ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        # while ifc != 1:
+        #     ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
-        if self.check_errors is True:
-            self.error_check()
+        # if self.check_errors is True:
+        #     self.error_check()
 
     def get_id(self):
         """Get the device identification string.
