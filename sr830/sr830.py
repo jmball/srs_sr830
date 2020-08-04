@@ -252,7 +252,7 @@ class sr830:
         ["", "Internal math error"],
     ]
 
-    def __init__(self, return_int=False, check_errors=True):
+    def __init__(self, return_int=False, check_errors=False):
         """Initialise object.
 
         Parameters
