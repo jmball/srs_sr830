@@ -317,12 +317,14 @@ class sr830:
         self.instr = rm.open_resource(resource_name, **resource_kwargs)
         if reset is True:
             self.reset()
+        self.set_output_interface(output_interface)
+        if output_interface == 0:
+            self.instr.read_termination = "\r"
         self.enable_all_status_bytes()
         if local_lockout is True:
             self.set_local_mode(2)
         else:
             self.set_local_mode(1)
-        self.set_output_interface(output_interface)
         logger.info(f"{','.join(self.get_id())} connected!")
         if set_default_configuration is True:
             self.set_configuration()
