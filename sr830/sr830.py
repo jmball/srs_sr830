@@ -269,10 +269,6 @@ class sr830:
         self.return_int = return_int
         self.check_errors = check_errors
 
-    def __del__(self):
-        """Ensure front panel unlocked if class instance is destroyed before disconnect."""
-        self.disconnect()
-
     def connect(
         self,
         resource_name,
