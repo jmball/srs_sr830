@@ -13,8 +13,6 @@ logging.captureWarnings(True)
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-rm = visa.ResourceManager()
-
 
 class sr830:
     """Stanford Research Systems SR830 LIA instrument.
@@ -252,33 +250,12 @@ class sr830:
         ["", "Internal math error"],
     ]
 
-    def __init__(self, return_int=False, check_errors=False):
+    def __init__(self, resource_name, resource_manager=None, **resource_kwargs):
         """Initialise object.
 
-        Parameters
-        ----------
-        return_int : bool, optional
-            The raw instrument response to a parameter query where the parameter values
-            are elements of a limited set is an integer that maps to a human-readable
-            value. If True, the raw integer is returned by the query method. If False,
-            the human-readable value that the integer maps to is returned by the query
-            method.
-        check_errors : bool, optional
-            Check instrument error status after every command.
-        """
-        self.return_int = return_int
-        self.check_errors = check_errors
-
-    def connect(
-        self,
-        resource_name,
-        output_interface,
-        reset=True,
-        set_default_configuration=True,
-        local_lockout=False,
-        **resource_kwargs,
-    ):
-        """Conntect to the instrument.
+        Creates private attributes used for the connect method. These attributes are
+        available from the self.instr PyVISA resource attribute after connect has
+        been called.
 
         Parameters
         ----------
@@ -286,306 +263,71 @@ class sr830:
             Full VISA resource name, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc. See
             https://pyvisa.readthedocs.io/en/latest/introduction/names.html for more
             info on correct formatting for resource names.
-        output_interface : {0, 1}
+        resource_manager : visa.ResourceManager, optional
+            Resource manager used to create new connection. If `None`, create a new
+            resource manager using system set VISA backend.
+        resource_kwargs : dict
+            Keyword arguments passed to PyVISA resource to be used to change
+            instrument attributes after construction.
+        """
+        self._resource_name = resource_name
+        self._resource_manager = resource_manager
+        self._resource_kwargs = resource_kwargs
+        self.instr = None
+
+    def connect(self, output_interface=0, reset=True, local_lockout=True):
+        """Conntect to the instrument.
+
+        Creates the `instr` attribute, which provides access to all low-level PyVISA
+        attributes and methods. This can be used to read the resource name, for
+        example.
+
+        Parameters
+        ----------
+        output_interface : {0, 1}, optional
             Communication interface on the lock-in amplifier rear panel used to read
-            instrument responses. Although the SR830 can read commands from both
-            interfaces at any time, it can only send responses over one. This does not
-            need to match the VISA resource interface type if, for example, an
-            interface adapter is used between the control computer and the instrument.
-            Valid output communication interfaces:
+            instrument responses. Default it RS232. Although the SR830 can read
+            commands from both interfaces at any time, it can only send responses over
+            one. This does not need to match the VISA resource interface type if, for
+            example, an interface adapter is used between the control computer and the
+            instrument. Valid output communication interfaces:
 
                 * 0 : RS232
                 * 1 : GPIB
 
         reset : bool, optional
             Reset the instrument to the built-in default configuration.
-        set_default_configuration : bool, optional
-            If True, set all configuration settings to defaults defined in the
-            `set_configuraiton` method.
         local_lockout : bool, optional
             If True all front panel keys are disabled, including the 'Local' key. If
             False all keys except the 'Local' key are disabled, which the user may
             press to manually return the instrument to local control.
-        resource_kwargs : dict
-            Keyword arguments to be used to change instrument attributes after
-            construction.
         """
-        self.instr = rm.open_resource(resource_name, **resource_kwargs)
+        # open the connection to the instrument
+        if self._resource_manager is None:
+            # create new resource manager using system setting for visa lib
+            self._resource_manager = visa.ResourceManager()
+        self.instr = self._resource_manager.open_resource(
+            self._resource_name, **self._resource_kwargs
+        )
         if output_interface == 0:
             self.instr.read_termination = "\r"
+
         if reset is True:
             self.reset()
-        self.set_output_interface(output_interface)
+
+        self.output_interface = output_interface
+
         self.enable_all_status_bytes()
+
         if local_lockout is True:
-            self.set_local_mode(2)
+            self.local_mode = 2
         else:
-            self.set_local_mode(1)
-        logger.info(f"{','.join(self.get_id())} connected!")
-        if set_default_configuration is True:
-            self.set_configuration()
+            self.local_mode = 1
 
     def disconnect(self):
         """Disconnect the instrument after returning to local mode."""
-        self.set_local_mode(0)
+        self.local_mode = 0
         self.instr.close()
-
-    def set_configuration(
-        self,
-        input_configuration=0,
-        input_coupling=0,
-        ground_shielding=1,
-        line_notch_filter_status=3,
-        ref_source=0,
-        detection_harmonic=1,
-        ref_trigger=1,
-        ref_freq=1000,
-        sensitivity=26,
-        reserve_mode=1,
-        time_constant=8,
-        low_pass_filter_slope=1,
-        sync_status=0,
-        ch1_display=1,
-        ch2_display=1,
-        ch1_ratio=0,
-        ch2_ratio=0,
-    ):
-        """Set the instrument configuration.
-
-        Parameters
-        ----------
-        input_configuration : {0, 1, 2, 3}
-            Input configuration:
-
-                * 0 : A
-                * 1 : A-B
-                * 2 : I (1 MOhm)
-                * 3 : I (100 MOhm)
-
-        input_coupling : {0, 1}
-            Input coupling:
-
-                * 0 : AC
-                * 1 : DC
-
-        ground_shielding : {0, 1}
-            Input shield grounding:
-
-                * 0 : Float
-                * 1 : Ground
-
-        line_notch_filter_status : {0, 1, 2, 3}
-            Input line notch filter status:
-
-                * 0 : no filters
-                * 1 : Line notch in
-                * 2 : 2 x Line notch in
-                * 3 : Both notch filters in
-
-        ref_source : {0, 1}
-            Refernce source:
-
-                * 0 : external
-                * 1 : internal
-
-        detection_harmonic : int
-            Detection harmonic, 1 =< harmonic =< 19999.
-        ref_trigger : {0, 1, 2}
-            Trigger type:
-
-                * 0: zero crossing
-                * 1: TTL rising egde
-                * 2: TTL falling edge
-
-        ref_freq : float
-            Frequency in Hz, 0.001 =< freq =< 102000.
-        sensitivity : {0 - 26}
-            Sensitivity in V/uA:
-
-                * 0 : 2e-9
-                * 1 : 5e-9
-                * 2 : 10e-9
-                * 3 : 20e-9
-                * 4 : 50e-9
-                * 5 : 100e-9
-                * 6 : 200e-9
-                * 7 : 500e-9
-                * 8 : 1e-6
-                * 9 : 2e-6
-                * 10 : 5e-6
-                * 11 : 10e-6
-                * 12 : 20e-6
-                * 13 : 50e-6
-                * 14 : 100e-6
-                * 15 : 200e-6
-                * 16 : 500e-6
-                * 17 : 1e-3
-                * 18 : 2e-3
-                * 19 : 5e-3
-                * 20 : 10e-3
-                * 21 : 20e-3
-                * 22 : 50e-3
-                * 23 : 100e-3
-                * 24 : 200e-3
-                * 25 : 500e-3
-                * 26 : 1
-
-        reserve_mode : {0, 1, 2}
-            Reserve mode:
-
-                * 0 : High reserve
-                * 1 : Normal
-                * 2 : Low noise
-
-        time_constant : {0 - 19}
-            Time constant in s:
-
-                * 0 : 10e-6
-                * 1 : 30e-6
-                * 2 : 100e-6
-                * 3 : 300e-6
-                * 4 : 1e-3
-                * 5 : 3e-3
-                * 6 : 10e-3
-                * 7 : 30e-3
-                * 8 : 100e-3
-                * 9 : 300e-3
-                * 10 : 1
-                * 11 : 3
-                * 12 : 10
-                * 13 : 30
-                * 14 : 100
-                * 15 : 300
-                * 16 : 1e3
-                * 17 : 3e3
-                * 18 : 10e3
-                * 19 : 30e3
-
-        low_pass_filter_slope : {0, 1, 2, 3}
-            Low pass filter slope in dB/oct:
-
-                * 0 : 6
-                * 1 : 12
-                * 2 : 18
-                * 3 : 24
-
-        sync_status : {0, 1}
-            Synchronous filter status:
-
-                * 0 : Off
-                * 1 : below 200 Hz
-
-        ch1_display : {0, 1, 2, 3, 4}
-            Display parameter for CH1:
-
-                * 0 : X
-                * 1 : R
-                * 2 : X Noise
-                * 3 : Aux In 1
-                * 4 : Aux In 2
-
-        ch2_display : {0, 1, 2, 3, 4}
-            Display parameter for CH2:
-
-                * 0 : Y
-                * 1 : Phase
-                * 2 : Y Noise
-                * 3 : Aux In 3
-                * 4 : Aux In 4
-
-        ch1_ratio : {0, 1, 2}
-            Ratio type for CH1:
-
-                * 0 : none
-                * 1 : Aux In 1
-                * 2 : Aux In 2
-
-        ch2_ratio : {0, 1, 2}
-            Ratio type for CH1:
-
-                * 0 : none
-                * 1 : Aux In 3
-                * 2 : Aux In 4
-        """
-        self.set_input_configuration(input_configuration)
-        self.set_input_coupling(input_coupling)
-        self.set_input_shield_gnd(ground_shielding)
-        self.set_line_notch_status(line_notch_filter_status)
-        self.set_ref_source(ref_source)
-        self.set_harmonic(detection_harmonic)
-        self.set_reference_trigger(ref_trigger)
-        self.set_ref_freq(ref_freq)
-        self.set_sensitivity(sensitivity)
-        self.set_reserve_mode(reserve_mode)
-        self.set_time_constant(time_constant)
-        self.set_lp_filter_slope(low_pass_filter_slope)
-        self.set_sync_status(sync_status)
-        self.set_display(1, ch1_display, ch1_ratio)
-        self.set_display(2, ch2_display, ch2_ratio)
-
-    def get_configuration(self):
-        """Get the instrument configuration.
-
-        Returns
-        -------
-        configuration : dict
-            Configuration dictionary with the following keys:
-
-                * input_configuration
-                * input_coupling
-                * ground_shielding
-                * line_notch_filter_status
-                * ref_source
-                * detection_harmonic
-                * ref_trigger
-                * ref_freq
-                * sensitivity
-                * reserve_mode
-                * time_constant
-                * low_pass_filter_slope
-                * sync_status
-                * ch1_display
-                * ch2_display
-                * ch1_ratio
-                * ch2_ratio
-        """
-        input_configuration = self.get_input_configuration()
-        input_coupling = self.get_input_coupling()
-        ground_shielding = self.get_input_shield_gnd()
-        line_notch_filter_status = self.get_line_notch_status()
-        ref_source = self.get_ref_source()
-        detection_harmonic = self.get_harmonic()
-        ref_trigger = self.get_reference_trigger()
-        ref_freq = self.get_ref_freq()
-        sensitivity = self.get_sensitivity()
-        reserve_mode = self.get_reserve_mode()
-        time_constant = self.get_time_constant()
-        low_pass_filter_slope = self.get_low_pass_filter_slope()
-        sync_status = self.get_sync_status()
-        ch1_display, ch1_ratio = self.get_display(1)
-        ch2_display, ch2_ratio = self.get_display(2)
-
-        configuration = {
-            "input_configuration": input_configuration,
-            "input_coupling": input_coupling,
-            "ground_shielding": ground_shielding,
-            "line_notch_filter_status": line_notch_filter_status,
-            "ref_source": ref_source,
-            "detection_harmonic": detection_harmonic,
-            "ref_trigger": ref_trigger,
-            "ref_freq": ref_freq,
-            "sensitivity": sensitivity,
-            "reserve_mode": reserve_mode,
-            "time_constant": time_constant,
-            "low_pass_filter_slope": low_pass_filter_slope,
-            "sync_status": sync_status,
-            "ch1_display": ch1_display,
-            "ch1_ratio": ch1_ratio,
-            "ch2_display": ch2_display,
-            "ch2_ratio": ch2_ratio,
-        }
-
-        return configuration
 
     def enable_all_status_bytes(self):
         """Enable all status bytes."""
@@ -1289,6 +1031,37 @@ class sr830:
 
     # --- Display and output commands ---
 
+    @property
+    def output_interface(self):
+        """Get the output communication interface.
+
+        Returns
+        -------
+        interface : {0, 1}
+            Output communication interface:
+
+                * 0 : RS232
+                * 1 : GPIB
+        """
+        return int(self.instr.query("OUTX?"))
+
+    @output_interface.setter
+    def output_interface(self, interface):
+        """Set the output communication interface.
+
+        This command should be sent before any query commands to direct the
+        responses to the interface in use.
+
+        Parameters
+        ----------
+        interface : {0, 1}
+            Output communication interface:
+
+                * 0 : RS232
+                * 1 : GPIB
+        """
+        self.instr.write(f"OUTX {interface}")
+
     def set_display(self, channel, display=1, ratio=0):
         """Set a channel display configuration.
 
@@ -1613,48 +1386,6 @@ class sr830:
         return voltage
 
     # --- Setup commands ---
-
-    def set_output_interface(self, interface):
-        """Set the output communication interface.
-
-        This command should be sent before any query commands to direct the
-        responses to the interface in use.
-
-        Parameters
-        ----------
-        interface : {0, 1}
-            Output communication interface:
-
-                * 0 : RS232
-                * 1 : GPIB
-        """
-        cmd = f"OUTX {interface}"
-        self.instr.write(cmd)
-
-        if self.check_errors is True:
-            self.error_check()
-
-    def get_output_interface(self):
-        """Get the output communication interface.
-
-        Returns
-        -------
-        interface : {0, 1}
-            Output communication interface:
-
-                * 0 : RS232
-                * 1 : GPIB
-        """
-        cmd = f"OUTX?"
-        interface = int(self.instr.query(cmd))
-
-        if self.check_errors is True:
-            self.error_check()
-
-        if self.return_int is True:
-            return interface
-        else:
-            return self.communication_interfaces[interface]
 
     def set_remote_status(self, status):
         """Set the remote status.
@@ -2420,25 +2151,8 @@ class sr830:
 
         return idn
 
-    def set_local_mode(self, local):
-        """Set the local/remote function.
-
-        Parameters
-        ----------
-        local : {0, 1, 2}
-            Local/remote function:
-
-                * 0 : LOCAL
-                * 1 : REMOTE
-                * 2 : LOCAL LOCKOUT
-        """
-        cmd = f"LOCL {local}"
-        self.instr.write(cmd)
-
-        if self.check_errors is True:
-            self.error_check()
-
-    def get_local_mode(self):
+    @property
+    def local_mode(self):
         """Get the local/remote function.
 
         Returns
@@ -2450,16 +2164,22 @@ class sr830:
                 * 1 : REMOTE
                 * 2 : LOCAL LOCKOUT
         """
-        cmd = "LOCL?"
-        local = int(self.instr.query(cmd))
+        return int(self.instr.query("LOCL?"))
 
-        if self.check_errors is True:
-            self.error_check()
+    @local_mode.setter
+    def local_mode(self, mode):
+        """Set the local/remote function.
 
-        if self.return_int is True:
-            return local
-        else:
-            return self.local_modes[local]
+        Parameters
+        ----------
+        mode : {0, 1, 2}
+            Local/remote function:
+
+                * 0 : LOCAL
+                * 1 : REMOTE
+                * 2 : LOCAL LOCKOUT
+        """
+        self.instr.write(f"LOCL {mode}")
 
     def set_gpib_overide_remote(self, condition):
         """Set the GPIB overide remote condition.
