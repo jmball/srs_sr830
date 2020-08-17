@@ -1095,8 +1095,11 @@ class sr830:
                 * 1 : Aux In 2
                 * 2 : Aux In 4
         """
-        display, ratio = self.instr.write(f"DDEF? {channel}").split(",")
-        return int(display), int(ratio)
+        if channel in [0, 1]:
+            display, ratio = self.instr.write(f"DDEF? {channel}").split(",")
+            return int(display), int(ratio)
+        else:
+            raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
     def set_front_output(self, channel, output=0):
         """Set front panel output sources.
@@ -1152,7 +1155,10 @@ class sr830:
                 * 0 : CH2 display
                 * 1 : Y
         """
-        return int(self.instr.query(f"FPOP? {channel}"))
+        if channel in [0, 1]:
+            return int(self.instr.query(f"FPOP? {channel}"))
+        else:
+            raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
     def set_output_offset_expand(self, parameter, offset, expand):
         """Set the output offsets and expands.
@@ -1215,8 +1221,13 @@ class sr830:
                 * 1 : 10
                 * 2 : 100
         """
-        offset, expand = self.instr.query(f"OEXP? {parameter}").split(",")
-        return float(offset), int(expand)
+        if parameter in range(3):
+            offset, expand = self.instr.query(f"OEXP? {parameter}").split(",")
+            return float(offset), int(expand)
+        else:
+            raise ValueError(
+                f"Invalid paramter: {parameter}. Must be 1 (X), 2 (Y), or 3 (R)."
+            )
 
     def auto_offset(self, parameter):
         """Set parameter offset to zero.
@@ -1230,7 +1241,12 @@ class sr830:
                 * 2 : Y
                 * 3 : R
         """
-        self.instr.write(f"AOFF {parameter}")
+        if parameter in range(3):
+            self.instr.write(f"AOFF {parameter}")
+        else:
+            raise ValueError(
+                f"Invalid paramter: {parameter}. Must be 1 (X), 2 (Y), or 3 (R)."
+            )
 
     # --- Aux input and output commands ---
 
@@ -1249,7 +1265,13 @@ class sr830:
         voltage : float
             Auxiliary input voltage.
         """
-        return float(self.instr.query(f"OAUX? {aux_in}"))
+        if aux_in in [1, 2, 3, 4]:
+            return float(self.instr.query(f"OAUX? {aux_in}"))
+        else:
+            raise ValueError(
+                f"Invalid auxilliary input: {aux_in}. Must be an integer in range "
+                + "1 - 4."
+            )
 
     def set_aux_out(self, aux_out, voltage):
         """Set voltage of auxiliary output.
@@ -1283,7 +1305,13 @@ class sr830:
         voltage : float
             Output voltage, -10.500 =< voltage =< 10.500
         """
-        return float(self.instr.query(f"AUXV? {aux_out}"))
+        if aux_out in [1, 2, 3, 4]:
+            return float(self.instr.query(f"AUXV? {aux_out}"))
+        else:
+            raise ValueError(
+                f"Invalid auxilliary output: {aux_out}. Must be an integer in range "
+                + "1 - 4."
+            )
 
     # --- Setup commands ---
 
@@ -1361,7 +1389,13 @@ class sr830:
         number : {1 - 9}
             Buffer number, 1 =< number =< 9.
         """
-        self.instr.write(f"SSET {number}")
+        if number in range(1, 10):
+            self.instr.write(f"SSET {number}")
+        else:
+            raise ValueError(
+                f"Invalid save buffer number: {number}. Must be an integer in range "
+                + "1 - 9."
+            )
 
     def recall_setup(self, number):
         """Recall lock-in setup from setting buffer.
@@ -1371,7 +1405,13 @@ class sr830:
         number : {1 - 9}
             Buffer number, 1 =< number =< 9.
         """
-        self.instr.write(f"RSET {number}")
+        if number in range(1, 10):
+            self.instr.write(f"RSET {number}")
+        else:
+            raise ValueError(
+                f"Invalid save buffer number: {number}. Must be an integer in range "
+                + "1 - 9."
+            )
 
     # --- Auto functions ---
 
@@ -1581,7 +1621,13 @@ class sr830:
         value : float
             Value of measured parameter in volts or degrees.
         """
-        return float(self.instr.query(f"OUTP? {parameter}"))
+        if parameter in range(1, 5):
+            return float(self.instr.query(f"OUTP? {parameter}"))
+        else:
+            raise ValueError(
+                f"Invalid parameter: {parameter}. Must be 1 (X), 2 (Y), 3 (R), or 4 "
+                + "(phase)."
+            )
 
     def read_display(self, channel):
         """Read the value of a channel display.
@@ -1599,7 +1645,10 @@ class sr830:
         value : float
             Displayed value in display units.
         """
-        return float(self.instr.query(f"OUTR? {channel}"))
+        if channel in [0, 1]:
+            return float(self.instr.query(f"OUTR? {channel}"))
+        else:
+            raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
     def measure_multiple(self, parameters):
         """Read multiple (2-6) parameter values simultaneously.
@@ -1638,10 +1687,15 @@ class sr830:
         values : tuple of float
             Values of measured parameters.
         """
-        parameters = ",".join([str(i) for i in parameters])
-        values = self.instr.query(f"SNAP? {parameters}").split(",")
-
-        return (float(i) for i in values)
+        if all(p in range(1, 12) for p in parameters):
+            parameters = ",".join([str(i) for i in parameters])
+            values = self.instr.query(f"SNAP? {parameters}").split(",")
+            return (float(i) for i in values)
+        else:
+            raise ValueError(
+                f"Invalid parameter list: {parameters}. All paramters must be integers"
+                + " in the range 1 - 11."
+            )
 
     def get_buffer_size(self):
         """Get the number of points stored in the buffer.
@@ -1671,29 +1725,42 @@ class sr830:
         channel : {1, 2}
             Channel 1 or 2.
         start_bin : int
-            Starting bin to read where 0 is oldest.
+            Starting bin to read where 0 is oldest. Must be in range 0 - 16382.
         bins : int
-            Number of bins to read.
+            Number of bins to read. Must be in range 1 - 16383.
 
         Returns
         -------
         buffer : tuple of float
             Data stored in buffer range.
         """
-        # pause storage if loop mode
-        buffer_mode = self.end_of_buffer_modes[self.end_of_buffer_mode]
-        if buffer_mode == "Loop":
-            self.pause()
+        if (
+            (channel in [1, 2])
+            and (start_bin >= 0)
+            and (start_bin <= 16382)
+            and (bins >= 1)
+            and (bins <= 16383)
+        ):
+            # pause storage if loop mode
+            buffer_mode = self.end_of_buffer_modes[self.end_of_buffer_mode]
+            if buffer_mode == "Loop":
+                self.pause()
 
-        buffer = self.instr.query_ascii_values(
-            f"TRCA? {channel},{start_bin},{bins}", container=tuple()
-        )
+            buffer = self.instr.query_ascii_values(
+                f"TRCA? {channel},{start_bin},{bins}", container=tuple()
+            )
 
-        # restart loop storage if previously set
-        if buffer_mode == "Loop":
-            self.end_of_buffer_mode = 1
+            # restart loop storage if previously set
+            if buffer_mode == "Loop":
+                self.end_of_buffer_mode = 1
 
-        return buffer
+            return buffer
+        else:
+            raise ValueError(
+                f"Invalid channel, start bin or bins: {channel}, {start_bin}, or "
+                + f"{bins}. Channel must be 1 (Ch1) or 2 (Ch2); start bin must in "
+                + "range 0 - 16382; and bins must be in range 1 - 16383."
+            )
 
     def get_binary_buffer_data(self, channel, start_bin, bins):
         """Get the points stored in a channel buffer range.
@@ -1713,43 +1780,56 @@ class sr830:
         channel : {1, 2}
             Channel 1 or 2.
         start_bin : int
-            Starting bin to read where 0 is oldest.
+            Starting bin to read where 0 is oldest. Must be in range 0 - 16382.
         bins : int
-            Number of bins to read.
+            Number of bins to read. Must be in range 1 - 16383.
 
         Returns
         -------
         buffer : tuple of float
             Data stored in buffer range.
         """
-        # determine how to read buffer over output interface
-        output_interface = self.output_interfaces[self.output_interface]
-        if output_interface == "RS232":
-            expect_termination = False
-            warnings.warn(
-                f"SRS recommends not using binary transfers over serial interfaces."
+        if (
+            (channel in [1, 2])
+            and (start_bin >= 0)
+            and (start_bin <= 16382)
+            and (bins >= 1)
+            and (bins <= 16383)
+        ):
+            # determine how to read buffer over output interface
+            output_interface = self.output_interfaces[self.output_interface]
+            if output_interface == "RS232":
+                expect_termination = False
+                warnings.warn(
+                    f"SRS recommends not using binary transfers over serial interfaces."
+                )
+            elif output_interface == "GPIB":
+                expect_termination = True
+
+            # pause storage if loop mode
+            buffer_mode = self.end_of_buffer_modes[self.end_of_buffer_mode]
+            if buffer_mode == "Loop":
+                self.pause()
+
+            buffer = self.instr.query_binary_values(
+                f"TRCB? {channel},{start_bin},{bins}",
+                datatype="f",
+                container=tuple(),
+                expect_termination=expect_termination,
+                data_points=bins,
             )
-        elif output_interface == "GPIB":
-            expect_termination = True
 
-        # pause storage if loop mode
-        buffer_mode = self.end_of_buffer_modes[self.end_of_buffer_mode]
-        if buffer_mode == "Loop":
-            self.pause()
+            # restart loop storage if previously set
+            if buffer_mode == "Loop":
+                self.end_of_buffer_mode = 1
 
-        buffer = self.instr.query_binary_values(
-            f"TRCB? {channel},{start_bin},{bins}",
-            datatype="f",
-            container=tuple(),
-            expect_termination=expect_termination,
-            data_points=bins,
-        )
-
-        # restart loop storage if previously set
-        if buffer_mode == "Loop":
-            self.end_of_buffer_mode = 1
-
-        return buffer
+            return buffer
+        else:
+            raise ValueError(
+                f"Invalid channel, start bin or bins: {channel}, {start_bin}, or "
+                + f"{bins}. Channel must be 1 (Ch1) or 2 (Ch2); start bin must in "
+                + "range 0 - 16382; and bins must be in range 1 - 16383."
+            )
 
     def get_non_norm_buffer_data(self, channel, start_bin, bins):
         """Get the points stored in a channel buffer range.
@@ -1770,52 +1850,65 @@ class sr830:
         channel : {1, 2}
             Channel 1 or 2.
         start_bin : int
-            Starting bin to read where 0 is oldest.
+            Starting bin to read where 0 is oldest. Must be in range 0 - 16382.
         bins : int
-            Number of bins to read.
+            Number of bins to read. Must be in range 1 - 16383.
 
         Returns
         -------
         buffer : tuple of float
             Data stored in buffer range.
         """
-        output_interface = self.output_interfaces[self.output_interface]
-        if output_interface == "RS232":
-            expect_termination = False
-            warnings.warn(
-                f"SRS recommends not using binary transfers over serial interfaces."
+        if (
+            (channel in [1, 2])
+            and (start_bin >= 0)
+            and (start_bin <= 16382)
+            and (bins >= 1)
+            and (bins <= 16383)
+        ):
+            output_interface = self.output_interfaces[self.output_interface]
+            if output_interface == "RS232":
+                expect_termination = False
+                warnings.warn(
+                    f"SRS recommends not using binary transfers over serial interfaces."
+                )
+            elif output_interface == "GPIB":
+                expect_termination = True
+
+            # pause storage if loop mode
+            buffer_mode = self.end_of_buffer_modes[self.end_of_buffer_mode]
+            if buffer_mode == "Loop":
+                self.pause()
+
+            # Although each value requires 4 bytes to be represented, read bytes into
+            # array 2 at time for later formatting, i.e. datatype is 'h' (short). Also,
+            # therefore read twice as many 2-byte values as 4-byte bins.
+            buffer = self.instr.query_binary_values(
+                f"TRCL? {channel},{start_bin},{bins}",
+                datatype="h",
+                is_big_endian=False,
+                container=list(),
+                expect_termination=expect_termination,
+                data_points=2 * bins,
             )
-        elif output_interface == "GPIB":
-            expect_termination = True
 
-        # pause storage if loop mode
-        buffer_mode = self.end_of_buffer_modes[self.end_of_buffer_mode]
-        if buffer_mode == "Loop":
-            self.pause()
+            # Convert raw byte array into array of floats using SR830 format
+            mantissa_buffer = buffer[::2]
+            exp_buffer = buffer[1::2]
+            buffer = [m * 2 ** (e - 124) for m, e in zip(mantissa_buffer, exp_buffer)]
+            buffer = tuple(buffer)
 
-        # Although each value requires 4 bytes to be represented, read bytes into array
-        # 2 at time for later formatting, i.e. datatype is 'h' (short). Also, therefore
-        # read twice as many 2-byte values as 4-byte bins.
-        buffer = self.instr.query_binary_values(
-            f"TRCL? {channel},{start_bin},{bins}",
-            datatype="h",
-            is_big_endian=False,
-            container=list(),
-            expect_termination=expect_termination,
-            data_points=2 * bins,
-        )
+            # restart loop storage if previously set
+            if buffer_mode == "Loop":
+                self.end_of_buffer_mode = 1
 
-        # Convert raw byte array into array of floats using SR830 format
-        mantissa_buffer = buffer[::2]
-        exp_buffer = buffer[1::2]
-        buffer = [m * 2 ** (e - 124) for m, e in zip(mantissa_buffer, exp_buffer)]
-        buffer = tuple(buffer)
-
-        # restart loop storage if previously set
-        if buffer_mode == "Loop":
-            self.end_of_buffer_mode = 1
-
-        return buffer
+            return buffer
+        else:
+            raise ValueError(
+                f"Invalid channel, start bin or bins: {channel}, {start_bin}, or "
+                + f"{bins}. Channel must be 1 (Ch1) or 2 (Ch2); start bin must in "
+                + "range 0 - 16382; and bins must be in range 1 - 16383."
+            )
 
     @property
     def data_transfer_mode(self):
@@ -1991,22 +2084,28 @@ class sr830:
         bit : None or {0-7}, optional
             Specific bit to set with a binary value.
         """
-        if decimal is True:
-            if (value >= 0) & (value <= 255):
-                cmd = f"{self._enable_register_cmd_dict[register]} {value}"
+        if register in (registers := self._enable_register_cmd_dict.keys()):
+            if decimal is True:
+                if (value >= 0) & (value <= 255):
+                    cmd = f"{self._enable_register_cmd_dict[register]} {value}"
+                else:
+                    raise ValueError(
+                        f"Invalid value: {value}. Must be in range 0 - 255 if decimal."
+                    )
             else:
-                raise ValueError(
-                    f"Invalid value: {value}. Must be in range 0 - 255 if decimal."
-                )
+                if (bit >= 0) & (bit <= 7) & ((value == 0) or (value == 1)):
+                    cmd = f"{self._enable_register_cmd_dict[register]} {bit},{value}"
+                else:
+                    raise ValueError(
+                        f"Invalud bit or value: {bit} or {value}. Bit must in range"
+                        + " 0 - 7 and value must be 0 or 1 if value is not decimal."
+                    )
+            self.instr.write(cmd)
         else:
-            if (bit >= 0) & (bit <= 7) & ((value == 0) or (value == 1)):
-                cmd = f"{self._enable_register_cmd_dict[register]} {bit},{value}"
-            else:
-                raise ValueError(
-                    f"Invalud bit or value: {bit} or {value}. Bit must in range"
-                    + " 0 - 7 and value must be 0 or 1 if value is not decimal."
-                )
-        self.instr.write(cmd)
+            raise ValueError(
+                f"Invalid register: {register}. Must be one of "
+                + f"{', '.join(list(registers))}."
+            )
 
     def get_enable_register(self, register, bit=None):
         """Get the standard event enable register value.
@@ -2023,16 +2122,22 @@ class sr830:
         value : int
             Register value.
         """
-        if bit is None:
-            cmd = f"{self._enable_register_cmd_dict[register]}?"
-        else:
-            if (bit >= 0) & (bit <= 7):
-                cmd = f"{self._enable_register_cmd_dict[register]}? {bit}"
+        if register in (registers := self._enable_register_cmd_dict.keys()):
+            if bit is None:
+                cmd = f"{self._enable_register_cmd_dict[register]}?"
             else:
-                raise ValueError(
-                    f"{bit} is out of range. Bit must be in range 0-7 if specified."
-                )
-        return int(self.instr.query(cmd))
+                if (bit >= 0) & (bit <= 7):
+                    cmd = f"{self._enable_register_cmd_dict[register]}? {bit}"
+                else:
+                    raise ValueError(
+                        f"{bit} is out of range. Bit must be in range 0-7 if specified."
+                    )
+            return int(self.instr.query(cmd))
+        else:
+            raise ValueError(
+                f"Invalid register: {register}. Must be one of "
+                + f"{', '.join(list(registers))}."
+            )
 
     def get_status_byte(self, status_byte, bit=None):
         """Get a status byte.
@@ -2051,16 +2156,22 @@ class sr830:
         value : int
             Status byte value.
         """
-        if bit is None:
-            cmd = f"{self._status_byte_cmd_dict[status_byte]}"
-        else:
-            if (bit >= 0) & (bit <= 7):
-                cmd = f"{self._status_byte_cmd_dict[status_byte]} {bit}"
+        if status_byte in (status_bytes := self._status_byte_cmd_dict.keys()):
+            if bit is None:
+                cmd = f"{self._status_byte_cmd_dict[status_byte]}"
             else:
-                raise ValueError(
-                    f"{bit} is out of range. Bit must be in range 0-7 if specified."
-                )
-        return int(self.instr.query(cmd))
+                if (bit >= 0) & (bit <= 7):
+                    cmd = f"{self._status_byte_cmd_dict[status_byte]} {bit}"
+                else:
+                    raise ValueError(
+                        f"{bit} is out of range. Bit must be in range 0-7 if specified."
+                    )
+            return int(self.instr.query(cmd))
+        else:
+            raise ValueError(
+                f"Invalid status byte: {status_byte}. Must be one of "
+                + f"{', '.join(list(status_bytes))}."
+            )
 
     @property
     def power_on_status_clear_bit(self):
