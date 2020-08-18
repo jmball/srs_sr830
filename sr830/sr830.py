@@ -1424,7 +1424,7 @@ class sr830:
 
         # poll serial poll status byte to determine whether execution in progress
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        while ifc != 1:
+        while ifc != 0:
             ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
     def auto_reserve(self):
@@ -1433,7 +1433,7 @@ class sr830:
 
         # poll serial poll status byte to determine whether execution in progress
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        while ifc != 1:
+        while ifc != 0:
             ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
     def auto_phase(self):
@@ -1442,7 +1442,7 @@ class sr830:
 
         # poll serial poll status byte to determine whether execution in progress
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        while ifc != 1:
+        while ifc != 0:
             ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
     # --- Data storage commands ---
@@ -1747,8 +1747,16 @@ class sr830:
                 self.pause()
 
             buffer = self.instr.query_ascii_values(
-                f"TRCA? {channel},{start_bin},{bins}", container=tuple()
+                f"TRCA? {channel},{start_bin},{bins}",
+                converter=lambda x: x,
+                container=list,
             )
+
+            # can leave a newline char at end of array that needs to be removed
+            if buffer[-1] == "\n":
+                buffer.pop()
+            # convert to tuple
+            buffer = tuple([float(x) for x in buffer])
 
             # restart loop storage if previously set
             if buffer_mode == "Loop":
@@ -1814,7 +1822,7 @@ class sr830:
             buffer = self.instr.query_binary_values(
                 f"TRCB? {channel},{start_bin},{bins}",
                 datatype="f",
-                container=tuple(),
+                container=tuple,
                 expect_termination=expect_termination,
                 data_points=bins,
             )
@@ -1887,7 +1895,7 @@ class sr830:
                 f"TRCL? {channel},{start_bin},{bins}",
                 datatype="h",
                 is_big_endian=False,
-                container=list(),
+                container=list,
                 expect_termination=expect_termination,
                 data_points=2 * bins,
             )
