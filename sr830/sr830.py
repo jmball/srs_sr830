@@ -630,6 +630,7 @@ class sr830:
                     errors.append(self._standard_event_status_byte[i][1])
 
         if len(errors) != 0:
+            print(f"Instrument reported errors: {', '.join(errors)}.")
             warnings.warn(f"Instrument reported errors: {', '.join(errors)}.")
 
     # --- Reference and phase commands ---
@@ -1794,7 +1795,7 @@ class sr830:
 
         # poll serial poll status byte to determine whether execution in progress
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        while ifc != 1:
+        while ifc != 0:
             ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
         if self.check_errors is True:
@@ -1807,7 +1808,7 @@ class sr830:
 
         # poll serial poll status byte to determine whether execution in progress
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        while ifc != 1:
+        while ifc != 0:
             ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
         if self.check_errors is True:
@@ -1820,7 +1821,7 @@ class sr830:
 
         # poll serial poll status byte to determine whether execution in progress
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        while ifc != 1:
+        while ifc != 0:
             ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
         if self.check_errors is True:
@@ -2184,7 +2185,15 @@ class sr830:
         if buffer_mode == "Loop":
             self.pause()
 
-        buffer = self.instr.query_ascii_values(cmd, container=tuple())
+        # read raw ascii values into a list
+        buffer = self.instr.query_ascii_values(
+            cmd, converter=lambda x: x, container=list
+        )
+        # can leave a newline char at end of array that needs to be removed
+        if buffer[-1] == "\n":
+            buffer.pop()
+        # convert to tuple
+        buffer = tuple([float(x) for x in buffer])
 
         if self.check_errors is True:
             self.error_check()
