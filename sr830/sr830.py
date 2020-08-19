@@ -1052,12 +1052,12 @@ class sr830:
                 * 1 : Aux In 3
                 * 2 : Aux In 4
         """
-        if (channel in [0, 1]) and (display in range(5)) and (ratio in range(3)):
+        if (channel in [1, 2]) and (display in range(5)) and (ratio in range(3)):
             self.instr.write(f"DDEF {channel}, {display}, {ratio}")
         else:
             raise ValueError(
                 f"Invalid channel, display, or ratio: {channel}, {display}, or {ratio}"
-                + ". Channel must be 0 (Ch1) or 1 (Ch2); display must be an integer in"
+                + ". Channel must be 1 (Ch1) or 2 (Ch2); display must be an integer in"
                 + " range 0 - 4; and ratio must be an integer in the range 0 - 2."
             )
 
