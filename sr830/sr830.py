@@ -146,7 +146,7 @@ class sr830:
 
     local_modes = ("Local", "Remote", "Local lockout")
 
-    gpib_overide_remote_conditions = ("No", "Yes")
+    gpib_override_remote_conditions = ("No", "Yes")
 
     # --- private class variables ---
 
@@ -161,7 +161,7 @@ class sr830:
         "standard_event": "*ESR?",
         "serial_poll": "*STB?",
         "error": "ERRS?",
-        "lia": "LIAS?",
+        "lia_status": "LIAS?",
     }
 
     # Meaning of status bits. Indices of outer list are same are bit numbers.
@@ -335,8 +335,15 @@ class sr830:
         for register in registers:
             self.set_enable_register(register, 255, decimal=True)
 
-    def error_check(self):
-        """Check for errors."""
+    @property
+    def errors(self):
+        """Check for errors.
+
+        Returns
+        -------
+        errors : list
+            List of errors.
+        """
         sp = self.get_status_byte("serial_poll")
         sp = format(sp, "b")
         errors = []
@@ -355,7 +362,7 @@ class sr830:
 
         # if any bits in LIA status byte are enabled check if they constitute an error
         if sp[3] == "1":
-            lsb = self.get_status_byte("lia")
+            lsb = self.get_status_byte("lia_status")
             lsb = format(lsb, "b")
             for i, bit in enumerate(lsb[:4]):
                 if bit == "1":
@@ -373,6 +380,8 @@ class sr830:
 
         if len(errors) != 0:
             warnings.warn(f"Instrument reported errors: {', '.join(errors)}.")
+
+        return errors
 
     # --- Reference and phase commands ---
     @property
@@ -1584,8 +1593,16 @@ class sr830:
         """Start or resume data storage.
 
         Ignored if storage already in progress.
+
+        After turning on fast data transfer, this function starts the scan after a
+        delay of 0.5 sec.
         """
-        self.instr.write("STRT")
+        if self.data_transfer_mode == 0:
+            # fast data transfer off
+            self.instr.write("STRT")
+        else:
+            # fast data transfer mode active
+            self.instr.write("STRD")
 
     def pause(self):
         """Pause data storage.
@@ -1687,17 +1704,21 @@ class sr830:
         values : tuple of float
             Values of measured parameters.
         """
-        if all(p in range(1, 12) for p in parameters):
+        if all(p in range(1, 12) for p in parameters) and (
+            len(parameters) in range(2, 7)
+        ):
             parameters = ",".join([str(i) for i in parameters])
             values = self.instr.query(f"SNAP? {parameters}").split(",")
             return (float(i) for i in values)
         else:
             raise ValueError(
                 f"Invalid parameter list: {parameters}. All paramters must be integers"
-                + " in the range 1 - 11."
+                + " in the range 1 - 11 and the list length must be in the range 2 - 6"
+                + "."
             )
 
-    def get_buffer_size(self):
+    @property
+    def buffer_size(self):
         """Get the number of points stored in the buffer.
 
         Returns
@@ -1735,11 +1756,9 @@ class sr830:
             Data stored in buffer range.
         """
         if (
-            (channel in [1, 2])
-            and (start_bin >= 0)
-            and (start_bin <= 16382)
-            and (bins >= 1)
-            and (bins <= 16383)
+            (channel in range(3))
+            and (start_bin in range(16383))
+            and (bins in range(1, 16384))
         ):
             # pause storage if loop mode
             buffer_mode = self.end_of_buffer_modes[self.end_of_buffer_mode]
@@ -1956,15 +1975,6 @@ class sr830:
                 + "or 2 (on [Windows])."
             )
 
-    def start_scan(self):
-        """Start scan.
-
-        After turning on fast data transfer, this function starts
-        the scan after a delay of 0.5 sec. Do not use the STRT command to start the
-        scan with fast mode enabled.
-        """
-        self.instr.write("STRD")
-
     # --- Interface commands ---
 
     def reset(self):
@@ -2031,8 +2041,8 @@ class sr830:
             )
 
     @property
-    def gpib_overide_remote(self):
-        """Get the GPIB overide remote condition.
+    def gpib_override_remote(self):
+        """Get the GPIB override remote condition.
 
         Under normal operation every GPIB command puts the instrument in the remote
         state with the front panel deactivated.
@@ -2040,16 +2050,16 @@ class sr830:
         Returns
         -------
         condition : int
-            GPIB overide remote condition:
+            GPIB override remote condition:
 
                 * 0 : No
                 * 1 : Yes
         """
         return int(self.instr.write("OVRM?"))
 
-    @gpib_overide_remote.setter
-    def gpib_overide_remote(self, condition):
-        """Set the GPIB overide remote condition.
+    @gpib_override_remote.setter
+    def gpib_override_remote(self, condition):
+        """Set the GPIB override remote condition.
 
         Under normal operation every GPIB command puts the instrument in the remote
         state with the front panel deactivated.
@@ -2057,7 +2067,7 @@ class sr830:
         Parameters
         ----------
         condition : int
-            GPIB overide remote condition:
+            GPIB override remote condition:
 
                 * 0 : No
                 * 1 : Yes
@@ -2066,7 +2076,7 @@ class sr830:
             self.instr.write(f"OVRM {condition}")
         else:
             raise ValueError(
-                f"Invalid GPIB overide remote condition: {condition}. Must be 0 (no) "
+                f"Invalid GPIB override remote condition: {condition}. Must be 0 (no) "
                 + "or 1 (yes)."
             )
 
@@ -2154,7 +2164,7 @@ class sr830:
 
         Parameters
         ----------
-        status_byte : {"standard_event", "serial_poll", "error", "lia"}
+        status_byte : {"standard_event", "serial_poll", "error", "lia_status"}
             Status byte to get.
         bit : None or {0-7}, optional
             Specific bit to get with a binary value. If `None` query entire byte.
