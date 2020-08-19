@@ -1430,15 +1430,17 @@ class sr830:
 
         Does nothing if the time constant is greater than 1 second.
         """
-        print(self.get_status_byte(status_byte="serial_poll", bit=1))
+        print(
+            f"before auotgain: {self.get_status_byte(status_byte='serial_poll', bit=1)}"
+        )
         self.instr.write("AGAN")
 
         # poll serial poll status byte to determine whether execution in progress
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        print(ifc)
-        while ifc != 0:
-            ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-            print(ifc)
+        print(f"after autogain: {ifc}")
+        # while ifc != 0:
+        #     ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        #     print(ifc)
 
     def auto_reserve(self):
         """Automatically set reserve."""
