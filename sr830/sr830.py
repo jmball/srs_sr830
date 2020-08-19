@@ -1775,7 +1775,7 @@ class sr830:
             print(buffer)
 
             # can leave a newline char at end of array that needs to be removed
-            if buffer[-1] == "\n":
+            if (buffer[-1] == "\n") or (buffer[-1] == ""):
                 buffer.pop()
             # convert to tuple
             buffer = tuple([float(x) for x in buffer])
