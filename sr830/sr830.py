@@ -1430,12 +1430,15 @@ class sr830:
 
         Does nothing if the time constant is greater than 1 second.
         """
+        print(self.get_status_byte(status_byte="serial_poll", bit=1))
         self.instr.write("AGAN")
 
         # poll serial poll status byte to determine whether execution in progress
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        print(ifc)
         while ifc != 0:
             ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+            print(ifc)
 
     def auto_reserve(self):
         """Automatically set reserve."""
@@ -1443,8 +1446,8 @@ class sr830:
 
         # poll serial poll status byte to determine whether execution in progress
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        while ifc != 0:
-            ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        # while ifc != 0:
+        #     ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
     def auto_phase(self):
         """Automatically set phase."""
@@ -1452,8 +1455,8 @@ class sr830:
 
         # poll serial poll status byte to determine whether execution in progress
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        while ifc != 0:
-            ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        # while ifc != 0:
+        #     ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
     # --- Data storage commands ---
 
@@ -1986,8 +1989,8 @@ class sr830:
         # TODO: test if enable status byte registers are set by default. If not, this
         # won't work
         ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
-        while ifc != 1:
-            ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
+        # while ifc != 1:
+        #     ifc = self.get_status_byte(status_byte="serial_poll", bit=1)
 
     @property
     def idn(self):
