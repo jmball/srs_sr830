@@ -1772,6 +1772,8 @@ class sr830:
                 container=list,
             )
 
+            print(buffer)
+
             # can leave a newline char at end of array that needs to be removed
             if buffer[-1] == "\n":
                 buffer.pop()
