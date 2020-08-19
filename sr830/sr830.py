@@ -379,6 +379,7 @@ class sr830:
                     errors.append(self._standard_event_status_byte[i][1])
 
         if len(errors) != 0:
+            print(f"Instrument reported errors: {', '.join(errors)}.")
             warnings.warn(f"Instrument reported errors: {', '.join(errors)}.")
 
         return errors
@@ -1755,6 +1756,7 @@ class sr830:
         buffer : tuple of float
             Data stored in buffer range.
         """
+<<<<<<< HEAD
         if (
             (channel in range(3))
             and (start_bin in range(16383))
@@ -1770,6 +1772,24 @@ class sr830:
                 converter=lambda x: x,
                 container=list,
             )
+=======
+        cmd = f"TRCA? {channel},{start_bin},{bins}"
+
+        # pause storage if loop mode
+        buffer_mode = self.get_end_of_buffer_mode()
+        if buffer_mode == "Loop":
+            self.pause()
+
+        # read raw ascii values into a list
+        buffer = self.instr.query_ascii_values(
+            cmd, converter=lambda x: x, container=list
+        )
+        # can leave a newline char at end of array that needs to be removed
+        if buffer[-1] == "\n":
+            buffer.pop()
+        # convert to tuple
+        buffer = tuple([float(x) for x in buffer])
+>>>>>>> 9444a22b543085d05f19139e8348f615c119ec30
 
             # can leave a newline char at end of array that needs to be removed
             if buffer[-1] == "\n":
