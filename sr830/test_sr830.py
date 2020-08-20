@@ -24,7 +24,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-lia = sr830.sr830(resource_name=args.resource_name)
+lia = sr830.sr830()
 
 
 def _int_property_test(settings, lia_property):
@@ -73,7 +73,10 @@ def _float_property_test(min_value, max_value, lia_property):
 def test_connect():
     """Test for successful connection with minimal setup."""
     lia.connect(
-        output_interface=args.output_interface, reset=False, local_lockout=False
+        args.resource_name,
+        output_interface=args.output_interface,
+        reset=False,
+        local_lockout=False,
     )
     assert lia.instr.session is not None
 
@@ -85,7 +88,7 @@ def test_reset():
 
 def test_get_enable_register():
     """Test query of all status register enables.
-    
+
     All should be disabled after a reset.
     """
     assert lia.get_enable_register("standard_event") == 0

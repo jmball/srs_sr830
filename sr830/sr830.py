@@ -250,12 +250,28 @@ class sr830:
         ["", "Internal math error"],
     ]
 
-    def __init__(self, resource_name, resource_manager=None, **resource_kwargs):
-        """Initialise object.
+    def __enter__(self):
+        """Enter the runtime context related to this object."""
+        return self
 
-        Creates private attributes used for the connect method. These attributes are
-        available from the self.instr PyVISA resource attribute after connect has
-        been called.
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Exit the runtime context related to this object."""
+        self.disconnect()
+
+    def connect(
+        self,
+        resource_name,
+        resource_manager=None,
+        resource_kwargs={},
+        output_interface=0,
+        reset=True,
+        local_lockout=True,
+    ):
+        """Conntect to the instrument.
+
+        Creates the `instr` attribute, which provides access to all low-level PyVISA
+        attributes and methods. This can be used to read the resource name, for
+        example.
 
         Parameters
         ----------
@@ -269,21 +285,6 @@ class sr830:
         resource_kwargs : dict
             Keyword arguments passed to PyVISA resource to be used to change
             instrument attributes after construction.
-        """
-        self._resource_name = resource_name
-        self._resource_manager = resource_manager
-        self._resource_kwargs = resource_kwargs
-        self.instr = None
-
-    def connect(self, output_interface=0, reset=True, local_lockout=True):
-        """Conntect to the instrument.
-
-        Creates the `instr` attribute, which provides access to all low-level PyVISA
-        attributes and methods. This can be used to read the resource name, for
-        example.
-
-        Parameters
-        ----------
         output_interface : {0, 1}, optional
             Communication interface on the lock-in amplifier rear panel used to read
             instrument responses. Default it RS232. Although the SR830 can read
@@ -302,15 +303,10 @@ class sr830:
             False all keys except the 'Local' key are disabled, which the user may
             press to manually return the instrument to local control.
         """
-        # open the connection to the instrument
-        if self._resource_manager is None:
+        if resource_manager is None:
             # create new resource manager using system setting for visa lib
-            self._resource_manager = visa.ResourceManager()
-        self.instr = self._resource_manager.open_resource(
-            self._resource_name, **self._resource_kwargs
-        )
-        if output_interface == 0:
-            self.instr.read_termination = "\r"
+            resource_manager = visa.ResourceManager()
+        self.instr = resource_manager.open_resource(resource_name, **resource_kwargs)
 
         if reset is True:
             self.reset()
@@ -1005,6 +1001,9 @@ class sr830:
                 * 1 : GPIB
         """
         if interface in [0, 1]:
+            if interface == 0:
+                # set read terminator for RS232
+                self.instr.read_termination = "\r"
             self.instr.write(f"OUTX {interface}")
         else:
             raise ValueError(
