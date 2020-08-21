@@ -262,10 +262,10 @@ class sr830:
         self,
         resource_name,
         resource_manager=None,
-        resource_kwargs={},
         output_interface=0,
         reset=True,
         local_lockout=True,
+        **resource_kwargs,
     ):
         """Conntect to the instrument.
 
@@ -282,9 +282,6 @@ class sr830:
         resource_manager : visa.ResourceManager, optional
             Resource manager used to create new connection. If `None`, create a new
             resource manager using system set VISA backend.
-        resource_kwargs : dict
-            Keyword arguments passed to PyVISA resource to be used to change
-            instrument attributes after construction.
         output_interface : {0, 1}, optional
             Communication interface on the lock-in amplifier rear panel used to read
             instrument responses. Default it RS232. Although the SR830 can read
@@ -302,6 +299,9 @@ class sr830:
             If True all front panel keys are disabled, including the 'Local' key. If
             False all keys except the 'Local' key are disabled, which the user may
             press to manually return the instrument to local control.
+        resource_kwargs : dict
+            Keyword arguments passed to PyVISA resource to be used to change
+            instrument attributes after construction.
         """
         if resource_manager is None:
             # create new resource manager using system setting for visa lib
