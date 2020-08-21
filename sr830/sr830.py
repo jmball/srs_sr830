@@ -1361,6 +1361,8 @@ class sr830:
     def alarm_status(self):
         """Get the alarm status.
 
+        The 'alarm' refers to all sounds emitted by the instrument.
+
         Returns
         -------
         status : {0, 1}
@@ -1374,6 +1376,8 @@ class sr830:
     @alarm_status.setter
     def alarm_status(self, status):
         """Set the alarm status.
+
+        The 'alarm' refers to all sounds emitted by the instrument.
 
         Parameters
         ----------
