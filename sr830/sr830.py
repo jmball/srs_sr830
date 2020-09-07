@@ -1104,7 +1104,7 @@ class sr830:
                 * 1 : Aux In 2
                 * 2 : Aux In 4
         """
-        if channel in [0, 1]:
+        if channel in [1, 2]:
             display, ratio = self.instr.write(f"DDEF? {channel}").split(",")
             return int(display), int(ratio)
         else:
@@ -1132,7 +1132,7 @@ class sr830:
                 * 0 : CH2 display
                 * 1 : Y
         """
-        if (channel in [0, 1]) and (output in [0, 1]):
+        if (channel in [1, 2]) and (output in [0, 1]):
             self.instr.write(f"FPOP {channel}, {output}")
         else:
             raise ValueError(
@@ -1164,7 +1164,7 @@ class sr830:
                 * 0 : CH2 display
                 * 1 : Y
         """
-        if channel in [0, 1]:
+        if channel in [1, 2]:
             return int(self.instr.query(f"FPOP? {channel}"))
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
@@ -1651,7 +1651,7 @@ class sr830:
         value : float
             Displayed value in display units.
         """
-        if channel in [0, 1]:
+        if channel in [1, 2]:
             return float(self.instr.query(f"OUTR? {channel}"))
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
