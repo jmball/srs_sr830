@@ -6,7 +6,7 @@ https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf.
 import logging
 import warnings
 
-import visa
+import pyvisa
 
 
 logging.captureWarnings(True)
@@ -305,7 +305,7 @@ class sr830:
         """
         if resource_manager is None:
             # create new resource manager using system setting for visa lib
-            resource_manager = visa.ResourceManager()
+            resource_manager = pyvisa.ResourceManager()
         self.instr = resource_manager.open_resource(resource_name, **resource_kwargs)
 
         if reset is True:
