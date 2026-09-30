@@ -39,8 +39,8 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
   interface-specific binary transfer behavior.
 - The SR830 programming manual is linked in both implementation module
   docstrings. Consult it when changing protocol behavior.
-- Python >=3.8 is required, matching the assignment expressions (`:=`) in both
-  implementations. Preserve this minimum unless the task changes compatibility.
+- Python >=3.10 is required. Preserve this minimum unless the task changes
+  compatibility.
 - No CI, formatter, linter, or hardware-free test runner is configured in the
   repository. Do not assume an established tool configuration.
 

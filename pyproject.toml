@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-  "setuptools >= 61",
+  "setuptools >= 77",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -9,8 +9,9 @@ name = "srs_sr830"
 version = "0.0.1"
 description = "Control a Stanford Research Systems SR830 lock-in amplifier"
 readme = "README.md"
-requires-python = ">=3.8"
-license = { file = "LICENSE" }
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "James Ball" }]
 classifiers = [
   "Operating System :: OS Independent",

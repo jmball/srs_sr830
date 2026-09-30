@@ -3,7 +3,7 @@ Control a Stanford Research Systems SR830 lock-in amplifier
 
 ## Installation
 
-Requires Python 3.8 or newer. Install from the repository root:
+Requires Python 3.10 or newer. Install from the repository root:
 
 ```sh
 python -m pip install .
