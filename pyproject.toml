@@ -1,6 +1,30 @@
 [build-system]
 requires = [
-  "setuptools >= 40.9.0",
-  "wheel",
+  "setuptools >= 61",
 ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "srs_sr830"
+version = "0.0.1"
+description = "Control a Stanford Research Systems SR830 lock-in amplifier"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [{ name = "James Ball" }]
+classifiers = [
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+  "pyvisa",
+  "pyvisa-py",
+]
+
+[project.urls]
+Homepage = "https://github.com/jmball/srs_sr830"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false

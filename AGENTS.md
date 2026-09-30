@@ -11,14 +11,15 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
   public interface, with dummy settings and measurement values. It is not a
   complete simulation of the instrument or a VISA resource.
 - Each package's `__init__.py` exports its implementation and obtains a version
-  through `pkg_resources`, falling back to `0.0.0`.
+  through `importlib.metadata` for the `srs_sr830` distribution, falling back to
+  `0.0.0`.
 - `src/sr830/test_sr830.py`: existing hardware integration tests.
 - `examples/logging.py`: logging and serial connection example. It opens a real
   resource at module scope; its `get_ref_freq()` call is stale relative to the
   driver's `reference_frequency` property.
-- `setup.cfg`: package metadata, package discovery, and runtime dependencies
-  (`pyvisa` and `pyvisa-py`). `pyproject.toml` selects the setuptools build
-  backend; `setup.py` is a minimal entry point.
+- `pyproject.toml`: package metadata, package discovery, runtime dependencies
+  (`pyvisa` and `pyvisa-py`), and the setuptools build backend. Keep installation
+  configuration here; there is no `setup.cfg` or `setup.py`.
 
 The distribution is named `srs_sr830`; imports are `sr830` and `virtual_sr830`.
 Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
@@ -38,9 +39,8 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
   interface-specific binary transfer behavior.
 - The SR830 programming manual is linked in both implementation module
   docstrings. Consult it when changing protocol behavior.
-- Metadata advertises Python >=3.6, but both implementations contain assignment
-  expressions (`:=`), which require Python >=3.8. Account for this discrepancy
-  when changing compatibility or packaging; do not claim Python 3.6 validation.
+- Python >=3.8 is required, matching the assignment expressions (`:=`) in both
+  implementations. Preserve this minimum unless the task changes compatibility.
 - No CI, formatter, linter, or hardware-free test runner is configured in the
   repository. Do not assume an established tool configuration.
 
