@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from contextlib import suppress
 from types import TracebackType
-from typing import Any, cast
+from typing import Any
 
 import logging
 import struct
@@ -25,6 +25,8 @@ from .settings import _Settings
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
+_NOT_CONNECTED_MESSAGE = "Instrument is not connected."
+
 
 class sr830(_Settings):
     """Stanford Research Systems SR830 LIA instrument.
@@ -37,34 +39,33 @@ class sr830(_Settings):
     def __init__(self) -> None:
         self._instr: MessageBasedResource | None = None
 
-    def _check_connected(self) -> None:
-        """Fail before attempting I/O when no resource is connected."""
-        if self._instr is None:
-            raise RuntimeError("Instrument is not connected.")
-
     def _write(self, command: str) -> None:
         """Send a command to the connected instrument."""
-        self._check_connected()
-        cast(MessageBasedResource, self._instr).write(command)
+        if self._instr is None:
+            raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        self._instr.write(command)
 
     def _query(self, command: str) -> str:
         """Send a command and read its text response."""
-        self._check_connected()
-        return cast(MessageBasedResource, self._instr).query(command)
+        if self._instr is None:
+            raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        return self._instr.query(command)
 
     def _query_ascii_values(self, command: str) -> list[str]:
         """Query ASCII fields, preserving empty trailing fields for buffer parsing."""
-        self._check_connected()
+        if self._instr is None:
+            raise RuntimeError(_NOT_CONNECTED_MESSAGE)
         return list(
-            cast(MessageBasedResource, self._instr).query_ascii_values(
+            self._instr.query_ascii_values(
                 command, converter=lambda value: value, container=list
             )
         )
 
     def _read_buffer_bytes(self, command: str, size: int) -> bytes:
         """Read a headerless SR830 buffer without interpreting CR/LF as framing."""
-        self._check_connected()
-        resource = cast(MessageBasedResource, self._instr)
+        if self._instr is None:
+            raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        resource = self._instr
         termination = resource.read_termination
         serial_end = resource.end_input if isinstance(resource, SerialInstrument) else None
         try:
@@ -873,10 +874,9 @@ class sr830(_Settings):
                 * 1 : GPIB
         """
         if interface in [0, 1]:
-            self._check_connected()
-            cast(MessageBasedResource, self._instr).read_termination = (
-                "\r" if interface == 0 else "\n"
-            )
+            if self._instr is None:
+                raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+            self._instr.read_termination = "\r" if interface == 0 else "\n"
             self._write(f"OUTX {interface}")
         else:
             raise ValueError(

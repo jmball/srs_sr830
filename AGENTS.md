@@ -47,8 +47,8 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
   and NumPy-style docstrings describing parameters, ranges, and units.
 - The hardware VISA resource is private (`self._instr`). Driver I/O uses
   guarded `_write()`, `_query()`, `_query_ascii_values()`, and
-  `_read_buffer_bytes()` helpers. `_check_connected()` raises RuntimeError when
-  disconnected and returns no resource. Direct resource access is reserved for
+  `_read_buffer_bytes()` helpers. Inline guards raise RuntimeError when
+  disconnected, using a shared message constant. Direct resource access is reserved for
   connection lifecycle and framing configuration. Setters validate values before
   writing commands. Preserve command spelling, channel numbering, and
   interface-specific binary transfer behavior.
