@@ -3,6 +3,16 @@
 The full instrument manual, including the programming guide, can be found at
 https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf.
 """
+from __future__ import annotations
+
+from collections.abc import Iterator, Sequence
+from types import TracebackType
+from typing import Any
+
+import pyvisa
+from pyvisa.constants import InterfaceType
+from sr830._connection import connection_kwargs, resolve_output_interface
+
 import warnings
 
 
@@ -237,27 +247,33 @@ class sr830:
         ["", "Internal math error"],
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialise dummy properties."""
+        self._connected = False
         self._set_dummy_properties()
 
-    def __enter__(self):
+    def __enter__(self) -> sr830:
         """Enter the runtime context related to this object."""
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         """Exit the runtime context related to this object."""
         self.disconnect()
 
-    def _set_dummy_properties(self):
+    def _set_dummy_properties(self) -> None:
         """Initialise dummy properties."""
-        self._errors = []
-        self._reference_phase_shift = 0
+        self._errors: list[str] = []
+        self._reference_phase_shift: float = 0
         self._reference_source = 0
-        self._reference_frequency = 1000
+        self._reference_frequency: float = 1000
         self._reference_trigger = 0
         self._harmonic = 1
-        self._sine_amplitude = 1
+        self._sine_amplitude: float = 1
         self._input_configuration = 0
         self._input_shield_grounding = 0
         self._input_coupling = 0
@@ -274,16 +290,16 @@ class sr830:
         self._ch2_ratio = 0
         self._ch1_output = 0
         self._ch2_output = 0
-        self._X_offset = 0
+        self._X_offset: float = 0
         self._X_expand = 0
-        self._Y_offset = 0
+        self._Y_offset: float = 0
         self._Y_expand = 0
-        self._R_offset = 0
+        self._R_offset: float = 0
         self._R_expand = 0
-        self._aux_out_1 = 0
-        self._aux_out_2 = 0
-        self._aux_out_3 = 0
-        self._aux_out_4 = 0
+        self._aux_out_1: float = 0
+        self._aux_out_2: float = 0
+        self._aux_out_3: float = 0
+        self._aux_out_4: float = 0
         self._key_click_state = 0
         self._alarm_status = 0
         self._sample_rate = 13
@@ -298,66 +314,47 @@ class sr830:
 
     def connect(
         self,
-        resource_name,
-        resource_manager=None,
-        output_interface=0,
-        reset=True,
-        local_lockout=True,
-        **resource_kwargs,
-    ):
-        """Conntect to the instrument.
+        resource_name: str,
+        *,
+        resource_manager: pyvisa.ResourceManager | None = None,
+        output_interface: int | None = None,
+        local_lockout: bool = True,
+        **resource_kwargs: Any,
+    ) -> None:
+        """Select the virtual response interface without opening a VISA resource.
 
-        Creates the `instr` attribute, which provides access to all low-level PyVISA
-        attributes and methods. This can be used to read the resource name, for
-        example.
-
-        Parameters
-        ----------
-        resource_name : str
-            Full VISA resource name, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc. See
-            https://pyvisa.readthedocs.io/en/latest/introduction/names.html for more
-            info on correct formatting for resource names.
-        resource_manager : visa.ResourceManager, optional
-            Resource manager used to create new connection. If `None`, create a new
-            resource manager using system set VISA backend.
-        output_interface : {0, 1}, optional
-            Communication interface on the lock-in amplifier rear panel used to read
-            instrument responses. Default it RS232. Although the SR830 can read
-            commands from both interfaces at any time, it can only send responses over
-            one. This does not need to match the VISA resource interface type if, for
-            example, an interface adapter is used between the control computer and the
-            instrument. Valid output communication interfaces:
-
-                * 0 : RS232
-                * 1 : GPIB
-
-        reset : bool, optional
-            Reset the instrument to the built-in default configuration.
-        local_lockout : bool, optional
-            If True all front panel keys are disabled, including the 'Local' key. If
-            False all keys except the 'Local' key are disabled, which the user may
-            press to manually return the instrument to local control.
-        resource_kwargs : dict
-            Keyword arguments passed to PyVISA resource to be used to change
-            instrument attributes after construction.
+        Infer ASRL/GPIB resource names, or use an explicit output_interface for
+        adapters. A supplied manager is only used to resolve names or aliases;
+        it remains caller-owned. Validate framing just like the hardware driver.
+        Reconnecting requires disconnect first. Reset is an explicit operation.
         """
-        self.output_interface = output_interface
-
-        if local_lockout is True:
-            self.local_mode = 2
+        if self._connected:
+            raise RuntimeError("Instrument is already connected; disconnect first.")
+        if "reset" in resource_kwargs:
+            raise TypeError("connect() no longer accepts reset; call reset() explicitly.")
+        if resource_manager is not None:
+            interface_type = resource_manager.resource_info(resource_name).interface_type
         else:
-            self.local_mode = 1
+            name = pyvisa.rname.parse_resource_name(resource_name)
+            interface_type = InterfaceType[name.interface_type.lower()]
+        interface = resolve_output_interface(interface_type, output_interface)
+        connection_kwargs(interface, resource_kwargs, interface_type=interface_type)
+        self.output_interface = interface
+        self.local_mode = 2 if local_lockout else 1
+        self._connected = True
 
-    def disconnect(self):
-        """Disconnect the instrument after returning to local mode."""
-        pass
+    def disconnect(self) -> None:
+        """Return to virtual local mode; repeated calls are harmless."""
+        if self._connected:
+            self.local_mode = 0
+            self._connected = False
 
-    def enable_all_status_bytes(self):
+    def enable_all_status_bytes(self) -> None:
         """Enable all status bytes."""
         pass
 
     @property
-    def errors(self):
+    def errors(self) -> list[str]:
         """Check for errors.
 
         Returns
@@ -369,7 +366,7 @@ class sr830:
 
     # --- Reference and phase commands ---
     @property
-    def reference_phase_shift(self):
+    def reference_phase_shift(self) -> float:
         """Get the reference phase shift.
 
         Returns
@@ -380,7 +377,7 @@ class sr830:
         return self._reference_phase_shift
 
     @reference_phase_shift.setter
-    def reference_phase_shift(self, phase_shift):
+    def reference_phase_shift(self, phase_shift: float) -> None:
         """Set the reference phase shift.
 
         Parameters
@@ -397,7 +394,7 @@ class sr830:
             )
 
     @property
-    def reference_source(self):
+    def reference_source(self) -> int:
         """Get the reference source.
 
         Returns
@@ -411,7 +408,7 @@ class sr830:
         return self._reference_source
 
     @reference_source.setter
-    def reference_source(self, source):
+    def reference_source(self, source: int) -> None:
         """Set the reference source.
 
         Parameters
@@ -431,7 +428,7 @@ class sr830:
             )
 
     @property
-    def reference_frequency(self):
+    def reference_frequency(self) -> float:
         """Get the reference frequency.
 
         Returns
@@ -442,7 +439,7 @@ class sr830:
         return self._reference_frequency
 
     @reference_frequency.setter
-    def reference_frequency(self, freq):
+    def reference_frequency(self, freq: float) -> None:
         """Set the frequency of the internal oscillator.
 
         Parameters
@@ -459,7 +456,7 @@ class sr830:
             )
 
     @property
-    def reference_trigger(self):
+    def reference_trigger(self) -> int:
         """Get the reference trigger type when using external ref.
 
         Returns
@@ -474,7 +471,7 @@ class sr830:
         return self._reference_trigger
 
     @reference_trigger.setter
-    def reference_trigger(self, trigger):
+    def reference_trigger(self, trigger: int) -> None:
         """Set the reference trigger type when using external ref.
 
         Parameters
@@ -495,7 +492,7 @@ class sr830:
             )
 
     @property
-    def harmonic(self):
+    def harmonic(self) -> int:
         """Get detection harmonic.
 
         Returns
@@ -506,7 +503,7 @@ class sr830:
         return self._harmonic
 
     @harmonic.setter
-    def harmonic(self, harmonic):
+    def harmonic(self, harmonic: int) -> None:
         """Set detection harmonic.
 
         Parameters
@@ -522,7 +519,7 @@ class sr830:
             )
 
     @property
-    def sine_amplitude(self):
+    def sine_amplitude(self) -> float:
         """Get the amplitude of the sine output.
 
         Returns
@@ -533,7 +530,7 @@ class sr830:
         return self._sine_amplitude
 
     @sine_amplitude.setter
-    def sine_amplitude(self, amplitude):
+    def sine_amplitude(self, amplitude: float) -> None:
         """Set the amplitude of the sine output.
 
         Parameters
@@ -550,7 +547,7 @@ class sr830:
             )
 
     @property
-    def input_configuration(self):
+    def input_configuration(self) -> int:
         """Set the input configuration.
 
         Returns
@@ -566,7 +563,7 @@ class sr830:
         return self._input_configuration
 
     @input_configuration.setter
-    def input_configuration(self, config):
+    def input_configuration(self, config: int) -> None:
         """Set the input configuration.
 
         Parameters
@@ -588,7 +585,7 @@ class sr830:
             )
 
     @property
-    def input_shield_grounding(self):
+    def input_shield_grounding(self) -> int:
         """Get input shield grounding.
 
         Returns
@@ -602,7 +599,7 @@ class sr830:
         return self._input_shield_grounding
 
     @input_shield_grounding.setter
-    def input_shield_grounding(self, grounding):
+    def input_shield_grounding(self, grounding: int) -> None:
         """Set input shield grounding.
 
         Parameters
@@ -622,7 +619,7 @@ class sr830:
             )
 
     @property
-    def input_coupling(self):
+    def input_coupling(self) -> int:
         """Get input coupling.
 
         Returns
@@ -636,7 +633,7 @@ class sr830:
         return self._input_coupling
 
     @input_coupling.setter
-    def input_coupling(self, coupling):
+    def input_coupling(self, coupling: int) -> None:
         """Set input coupling.
 
         Parameters
@@ -655,7 +652,7 @@ class sr830:
             )
 
     @property
-    def line_notch_filter_status(self):
+    def line_notch_filter_status(self) -> int:
         """Get input line notch filter status.
 
         Returns
@@ -671,7 +668,7 @@ class sr830:
         return self._line_notch_filter_status
 
     @line_notch_filter_status.setter
-    def line_notch_filter_status(self, status):
+    def line_notch_filter_status(self, status: int) -> None:
         """Set input line notch filter status.
 
         Parameters
@@ -696,7 +693,7 @@ class sr830:
     # --- Gain and time constant commands ---
 
     @property
-    def sensitivity(self):
+    def sensitivity(self) -> int:
         """Get sensitivity.
 
         Returns
@@ -735,7 +732,7 @@ class sr830:
         return self._sensitivity
 
     @sensitivity.setter
-    def sensitivity(self, sensitivity):
+    def sensitivity(self, sensitivity: int) -> None:
         """Set sensitivity.
 
         Parameters
@@ -780,7 +777,7 @@ class sr830:
             )
 
     @property
-    def reserve_mode(self):
+    def reserve_mode(self) -> int:
         """Get reserve mode.
 
         Returns
@@ -795,7 +792,7 @@ class sr830:
         return self._reserve_mode
 
     @reserve_mode.setter
-    def reserve_mode(self, mode):
+    def reserve_mode(self, mode: int) -> None:
         """Set reserve mode.
 
         Parameters
@@ -816,7 +813,7 @@ class sr830:
             )
 
     @property
-    def time_constant(self):
+    def time_constant(self) -> int:
         """Get time constant.
 
         Returns
@@ -848,7 +845,7 @@ class sr830:
         return self._time_constant
 
     @time_constant.setter
-    def time_constant(self, tc):
+    def time_constant(self, tc: int) -> None:
         """Set time constant.
 
         Parameters
@@ -885,7 +882,7 @@ class sr830:
             )
 
     @property
-    def lowpass_filter_slope(self):
+    def lowpass_filter_slope(self) -> int:
         """Get the low pass filter slope.
 
         Parameters
@@ -901,7 +898,7 @@ class sr830:
         return self._lowpass_filter_slope
 
     @lowpass_filter_slope.setter
-    def lowpass_filter_slope(self, slope):
+    def lowpass_filter_slope(self, slope: int) -> None:
         """Set the low pass filter slope.
 
         Parameters
@@ -923,7 +920,7 @@ class sr830:
             )
 
     @property
-    def sync_filter_status(self):
+    def sync_filter_status(self) -> int:
         """Get synchronous filter status.
 
         Returns
@@ -937,7 +934,7 @@ class sr830:
         return self._sync_filter_status
 
     @sync_filter_status.setter
-    def sync_filter_status(self, status):
+    def sync_filter_status(self, status: int) -> None:
         """Set synchronous filter status.
 
         Parameters
@@ -959,7 +956,7 @@ class sr830:
     # --- Display and output commands ---
 
     @property
-    def output_interface(self):
+    def output_interface(self) -> int:
         """Get the output communication interface.
 
         Returns
@@ -973,7 +970,7 @@ class sr830:
         return self._output_interface
 
     @output_interface.setter
-    def output_interface(self, interface):
+    def output_interface(self, interface: int) -> None:
         """Set the output communication interface.
 
         This command should be sent before any query commands to direct the
@@ -995,7 +992,7 @@ class sr830:
                 + "(GPIB)."
             )
 
-    def set_display(self, channel, display=1, ratio=0):
+    def set_display(self, channel: int, display: int = 1, ratio: int = 0) -> None:
         """Set a channel display configuration.
 
         Parameters
@@ -1050,7 +1047,7 @@ class sr830:
                 + " range 0 - 4; and ratio must be an integer in the range 0 - 2."
             )
 
-    def get_display(self, channel):
+    def get_display(self, channel: int) -> tuple[int, int]:
         """Get a channel display configuration.
 
         Parameters
@@ -1100,7 +1097,7 @@ class sr830:
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
-    def set_front_output(self, channel, output=0):
+    def set_front_output(self, channel: int, output: int = 0) -> None:
         """Set front panel output sources.
 
         Parameters
@@ -1133,7 +1130,7 @@ class sr830:
                 + "(Ch1) or 1 (Ch2); and output must be 0 or 1."
             )
 
-    def get_front_output(self, channel):
+    def get_front_output(self, channel: int) -> int:
         """Get front panel output sources.
 
         Parameters
@@ -1164,7 +1161,12 @@ class sr830:
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
-    def set_output_offset_expand(self, parameter, offset, expand):
+    def set_output_offset_expand(
+        self,
+        parameter: int,
+        offset: float,
+        expand: int,
+    ) -> None:
         """Set the output offsets and expands.
 
         Setting an offset to zero turns the offset off.
@@ -1210,7 +1212,7 @@ class sr830:
                 + "(10), or 2 (100)."
             )
 
-    def get_output_offset_expand(self, parameter):
+    def get_output_offset_expand(self, parameter: int) -> tuple[float, int]:
         """Get the output offsets and expands.
 
         Parameters
@@ -1244,7 +1246,7 @@ class sr830:
                 f"Invalid paramter: {parameter}. Must be 1 (X), 2 (Y), or 3 (R)."
             )
 
-    def auto_offset(self, parameter):
+    def auto_offset(self, parameter: int) -> None:
         """Set parameter offset to zero.
 
         Paramaters
@@ -1269,7 +1271,7 @@ class sr830:
 
     # --- Aux input and output commands ---
 
-    def get_aux_in(self, aux_in):
+    def get_aux_in(self, aux_in: int) -> float:
         """Get voltage of auxiliary input.
 
         The resolution is 1/3 mV.
@@ -1292,7 +1294,7 @@ class sr830:
                 + "1 - 4."
             )
 
-    def set_aux_out(self, aux_out, voltage):
+    def set_aux_out(self, aux_out: int, voltage: float) -> None:
         """Set voltage of auxiliary output.
 
         Parameters
@@ -1318,7 +1320,7 @@ class sr830:
                 + "range -10.5 - 10.5 volts."
             )
 
-    def get_aux_out(self, aux_out):
+    def get_aux_out(self, aux_out: int) -> float:
         """Get voltage of auxiliary output.
 
         Parameters
@@ -1348,7 +1350,7 @@ class sr830:
     # --- Setup commands ---
 
     @property
-    def key_click_state(self):
+    def key_click_state(self) -> int:
         """Get key click state.
 
         Returns
@@ -1362,7 +1364,7 @@ class sr830:
         return self._key_click_state
 
     @key_click_state.setter
-    def key_click_state(self, state):
+    def key_click_state(self, state: int) -> None:
         """Set key click state.
 
         Parameters
@@ -1381,7 +1383,7 @@ class sr830:
             )
 
     @property
-    def alarm_status(self):
+    def alarm_status(self) -> int:
         """Get the alarm status.
 
         The 'alarm' refers to all sounds emitted by the instrument.
@@ -1397,7 +1399,7 @@ class sr830:
         return self._alarm_status
 
     @alarm_status.setter
-    def alarm_status(self, status):
+    def alarm_status(self, status: int) -> None:
         """Set the alarm status.
 
         The 'alarm' refers to all sounds emitted by the instrument.
@@ -1417,7 +1419,7 @@ class sr830:
                 f"Invalid alarm status: {status}. Must be 0 (off) or 1 (on)."
             )
 
-    def save_setup(self, number):
+    def save_setup(self, number: int) -> None:
         """Save the lock-in setup in a settings buffer.
 
         Parameters
@@ -1433,7 +1435,7 @@ class sr830:
                 + "1 - 9."
             )
 
-    def recall_setup(self, number):
+    def recall_setup(self, number: int) -> None:
         """Recall lock-in setup from setting buffer.
 
         Parameters
@@ -1451,25 +1453,25 @@ class sr830:
 
     # --- Auto functions ---
 
-    def auto_gain(self):
+    def auto_gain(self) -> None:
         """Automatically set the gain.
 
         Does nothing if the time constant is greater than 1 second.
         """
         pass
 
-    def auto_reserve(self):
+    def auto_reserve(self) -> None:
         """Automatically set reserve."""
         pass
 
-    def auto_phase(self):
+    def auto_phase(self) -> None:
         """Automatically set phase."""
         pass
 
     # --- Data storage commands ---
 
     @property
-    def sample_rate(self):
+    def sample_rate(self) -> int:
         """Get the data sample rate.
 
         Returns
@@ -1496,7 +1498,7 @@ class sr830:
         return self._sample_rate
 
     @sample_rate.setter
-    def sample_rate(self, rate):
+    def sample_rate(self, rate: int) -> None:
         """Set the data sample rate.
 
         Paramters
@@ -1528,7 +1530,7 @@ class sr830:
             )
 
     @property
-    def end_of_buffer_mode(self):
+    def end_of_buffer_mode(self) -> int:
         """Get the end of buffer mode.
 
         Returns
@@ -1542,7 +1544,7 @@ class sr830:
         return self._end_of_buffer_mode
 
     @end_of_buffer_mode.setter
-    def end_of_buffer_mode(self, mode):
+    def end_of_buffer_mode(self, mode: int) -> None:
         """Set the end of buffer mode.
 
         If Loop mode is used, make sure to pause data storage before reading the
@@ -1563,12 +1565,12 @@ class sr830:
                 f"Invalid end of buffer mode: {mode}. Must be 0 (1 shot) or 1 (loop)."
             )
 
-    def trigger(self):
+    def trigger(self) -> None:
         """Send software trigger."""
         pass
 
     @property
-    def trigger_start_mode(self):
+    def trigger_start_mode(self) -> int:
         """Get the trigger start mode.
 
         Returns
@@ -1582,7 +1584,7 @@ class sr830:
         return self._trigger_start_mode
 
     @trigger_start_mode.setter
-    def trigger_start_mode(self, mode):
+    def trigger_start_mode(self, mode: int) -> None:
         """Set the trigger start mode.
 
         Parameters
@@ -1601,7 +1603,7 @@ class sr830:
                 + "(start scan)."
             )
 
-    def start(self):
+    def start(self) -> None:
         """Start or resume data storage.
 
         Ignored if storage already in progress.
@@ -1612,7 +1614,7 @@ class sr830:
         # TODO: implement dummy store in buffer
         pass
 
-    def pause(self):
+    def pause(self) -> None:
         """Pause data storage.
 
         Ignored if storage is already paused or reset.
@@ -1620,7 +1622,7 @@ class sr830:
         # TODO: implement dummy store in buffer
         pass
 
-    def reset_data_buffers(self):
+    def reset_data_buffers(self) -> None:
         """Reset data buffers.
 
         This command will erase the data buffer.
@@ -1630,7 +1632,7 @@ class sr830:
 
     # --- Data transfer commands ---
 
-    def measure(self, parameter):
+    def measure(self, parameter: int) -> float:
         """Read the value of X, Y, R, or phase.
 
         Parameters
@@ -1656,7 +1658,7 @@ class sr830:
                 + "(phase)."
             )
 
-    def read_display(self, channel):
+    def read_display(self, channel: int) -> float:
         """Read the value of a channel display.
 
         Parameters
@@ -1677,7 +1679,7 @@ class sr830:
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
-    def measure_multiple(self, parameters):
+    def measure_multiple(self, parameters: Sequence[int]) -> Iterator[float]:
         """Read multiple (2-6) parameter values simultaneously.
 
         The values of X and Y are recorded at a single instant.
@@ -1711,7 +1713,7 @@ class sr830:
 
         Returns
         -------
-        values : tuple of float
+        values : iterator of float
             Values of measured parameters.
         """
         if all(p in range(1, 12) for p in parameters) and (
@@ -1726,7 +1728,7 @@ class sr830:
             )
 
     @property
-    def buffer_size(self):
+    def buffer_size(self) -> int:
         """Get the number of points stored in the buffer.
 
         Returns
@@ -1736,7 +1738,12 @@ class sr830:
         """
         return self._buffer_size
 
-    def get_ascii_buffer_data(self, channel, start_bin, bins):
+    def get_ascii_buffer_data(
+        self,
+        channel: int,
+        start_bin: int,
+        bins: int,
+    ) -> tuple[float, ...]:
         """Get the points stored in a channel buffer range.
 
         The values are returned as ASCII floating point numbers with
@@ -1776,7 +1783,12 @@ class sr830:
                 + "range 0 - 16382; and bins must be in range 1 - 16383."
             )
 
-    def get_binary_buffer_data(self, channel, start_bin, bins):
+    def get_binary_buffer_data(
+        self,
+        channel: int,
+        start_bin: int,
+        bins: int,
+    ) -> tuple[float, ...]:
         """Get the points stored in a channel buffer range.
 
         The values are returned as IEEE format binary floating point
@@ -1818,7 +1830,12 @@ class sr830:
                 + "range 0 - 16382; and bins must be in range 1 - 16383."
             )
 
-    def get_non_norm_buffer_data(self, channel, start_bin, bins):
+    def get_non_norm_buffer_data(
+        self,
+        channel: int,
+        start_bin: int,
+        bins: int,
+    ) -> tuple[float, ...]:
         """Get the points stored in a channel buffer range.
 
         The values are returned as non-normalised floating point
@@ -1862,7 +1879,7 @@ class sr830:
             )
 
     @property
-    def data_transfer_mode(self):
+    def data_transfer_mode(self) -> int:
         """Get the data transfer mode.
 
         Returns
@@ -1877,7 +1894,7 @@ class sr830:
         return self._data_transfer_mode
 
     @data_transfer_mode.setter
-    def data_transfer_mode(self, mode):
+    def data_transfer_mode(self, mode: int) -> None:
         """Set the data transfer mode.
 
         GPIB only.
@@ -1901,12 +1918,12 @@ class sr830:
 
     # --- Interface commands ---
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset the instrument to the default configuration."""
         self._set_dummy_properties()
 
     @property
-    def idn(self):
+    def idn(self) -> str:
         """Get the device identification string.
 
         The string is in the format "Stanford_Research_Systems,SR830,s/n00111,ver1.000",
@@ -1922,7 +1939,7 @@ class sr830:
         return self._idn
 
     @property
-    def local_mode(self):
+    def local_mode(self) -> int:
         """Get the local/remote function.
 
         Returns
@@ -1937,7 +1954,7 @@ class sr830:
         return self._local_mode
 
     @local_mode.setter
-    def local_mode(self, mode):
+    def local_mode(self, mode: int) -> None:
         """Set the local/remote function.
 
         Parameters
@@ -1958,7 +1975,7 @@ class sr830:
             )
 
     @property
-    def gpib_override_remote(self):
+    def gpib_override_remote(self) -> int:
         """Get the GPIB override remote condition.
 
         Under normal operation every GPIB command puts the instrument in the remote
@@ -1975,7 +1992,7 @@ class sr830:
         return self._gpib_override_remote
 
     @gpib_override_remote.setter
-    def gpib_override_remote(self, condition):
+    def gpib_override_remote(self, condition: int) -> None:
         """Set the GPIB override remote condition.
 
         Under normal operation every GPIB command puts the instrument in the remote
@@ -1999,11 +2016,17 @@ class sr830:
 
     # --- Status reporting commands ---
 
-    def clear_status_registers(self):
+    def clear_status_registers(self) -> None:
         """Clear all status registers."""
         pass
 
-    def set_enable_register(self, register, value, decimal=True, bit=None):
+    def set_enable_register(
+        self,
+        register: str,
+        value: int,
+        decimal: bool = True,
+        bit: int | None = None,
+    ) -> None:
         """Set an enable register.
 
         Parameters
@@ -2028,7 +2051,7 @@ class sr830:
                 + f"{', '.join(list(registers))}."
             )
 
-    def get_enable_register(self, register, bit=None):
+    def get_enable_register(self, register: str, bit: int | None = None) -> None:
         """Get the standard event enable register value.
 
         Parameters
@@ -2052,7 +2075,7 @@ class sr830:
                 + f"{', '.join(list(registers))}."
             )
 
-    def get_status_byte(self, status_byte, bit=None):
+    def get_status_byte(self, status_byte: str, bit: int | None = None) -> None:
         """Get a status byte.
 
         This function has no error check to avoid infinite recursion.
@@ -2079,7 +2102,7 @@ class sr830:
             )
 
     @property
-    def power_on_status_clear_bit(self):
+    def power_on_status_clear_bit(self) -> int:
         """Get the power-on status clear bit.
 
         Returns
@@ -2090,7 +2113,7 @@ class sr830:
         return self._power_on_status_clear_bit
 
     @power_on_status_clear_bit.setter
-    def power_on_status_clear_bit(self, value):
+    def power_on_status_clear_bit(self, value: int) -> None:
         """Set the power-on status clear bit.
 
         Parameters

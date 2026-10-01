@@ -1,32 +1,23 @@
-"""Logging example."""
-
+"""Log identification and reference frequency from a real serial instrument."""
 import logging
 import sys
 
 import sr830
 
-# set up logger
-console_handler = logging.StreamHandler(sys.stdout)
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s|%(name)s|%(levelname)s|%(message)s",
-    handlers=[console_handler],
-)
-logger = logging.getLogger()
 
-# instantiate object
-instr = sr830.sr830()
-instr.connect(resource_name="ASRL2::INSTR", output_interface=0)
+def main() -> None:
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s|%(name)s|%(levelname)s|%(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+    logger = logging.getLogger(__name__)
+    with sr830.sr830() as instrument:
+        # Match baud rate and parity to the instrument's front-panel settings.
+        instrument.connect("ASRL2::INSTR", baud_rate=9600)
+        logger.info("Connected: %s", instrument.idn)
+        logger.info("Reference frequency = %s Hz", instrument.reference_frequency)
 
-# log device info
-sn = instr.serial_number
-logger.info(
-    f"{instr.manufacturer}, {instr.model}, {sn}, {instr.firmware_version} connected!"
-)
 
-# query something and log formatted response
-freq = instr.get_ref_freq()
-logger.info(f"{sn}, ref frequency = {freq} Hz")
-
-# close VISA resource
-instr.disconnect()
+if __name__ == "__main__":
+    main()

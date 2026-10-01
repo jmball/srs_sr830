@@ -14,9 +14,11 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
   through `importlib.metadata` for the `srs_sr830` distribution, falling back to
   `0.0.0`.
 - `src/sr830/test_sr830.py`: existing hardware integration tests.
-- `examples/logging.py`: logging and serial connection example. It opens a real
-  resource at module scope; its `get_ref_freq()` call is stale relative to the
-  driver's `reference_frequency` property.
+- `examples/logging.py`: logging and serial connection example. Running it
+  opens a real resource.
+- `src/sr830/_connection.py`: shared interface inference and framing validation.
+- `tests/test_connection.py`: hardware-free lifecycle and annotation checks,
+  run with `python -m unittest discover -s tests`.
 - `pyproject.toml`: package metadata, package discovery, runtime dependencies
   (`pyvisa` and `pyvisa-py`), and the setuptools build backend. Keep installation
   configuration here; there is no `setup.cfg` or `setup.py`.
@@ -41,8 +43,10 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
   docstrings. Consult it when changing protocol behavior.
 - Python >=3.10 is required. Preserve this minimum unless the task changes
   compatibility.
-- No CI, formatter, linter, or hardware-free test runner is configured in the
-  repository. Do not assume an established tool configuration.
+- No CI, formatter, or linter is configured. Both packages ship `py.typed`.
+  Driver annotations can be checked with `mypy --strict --follow-imports=silent
+  src/sr830/sr830.py src/sr830/_connection.py
+  src/virtual_sr830/virtual_sr830.py` (install mypy separately).
 
 ## Setup and validation
 
@@ -74,11 +78,15 @@ so they do not establish setter correctness. Inspect and address these issues
 before relying on this suite.
 
 Real hardware runs require a user-provided VISA resource and appropriate
-authorization to change its settings. `connect()` defaults to resetting the
-instrument and locking its front panel, enables status registers, and selects
-the response interface (`0` RS232, `1` GPIB). Even `reset=False` and
-`local_lockout=False` still change settings. Disconnect after hardware work;
-the hardware driver's context manager calls `disconnect()` on exit.
+authorization to change its settings. `connect()` never resets the instrument;
+reset is an explicit caller operation. It locks the front panel by default,
+enables status registers, and selects the response interface (`0` RS232,
+`1` GPIB), inferred for ASRL/GPIB and explicit for ambiguous adapters. Even
+`local_lockout=False` changes settings. Connection options are keyword-only,
+conflicting framing is rejected, and connecting twice raises. Disconnect clears
+`instr`, is idempotent, and closes only the resource; managers remain open
+because PyVISA shares them. Disconnect after hardware work; the hardware
+driver's context manager calls `disconnect()` on exit.
 
 ## Development VM environment
 

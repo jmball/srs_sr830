@@ -29,3 +29,7 @@ Homepage = "https://github.com/jmball/srs_sr830"
 [tool.setuptools.packages.find]
 where = ["src"]
 namespaces = false
+
+[tool.setuptools.package-data]
+sr830 = ["py.typed"]
+virtual_sr830 = ["py.typed"]
