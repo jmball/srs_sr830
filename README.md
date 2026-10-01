@@ -119,7 +119,39 @@ expansion (gain 1). Setters still accept table indices rather than physical
 quantities. See the [SR830 programming manual](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf)
 for instrument codes and units.
 
-Hardware-free connection and settings tests can be run with:
+## Logging and warnings
+
+The driver uses the `sr830.sr830` logger with a `NullHandler`. Applications
+choose handlers, formatting, and levels. Enable `DEBUG` for connection setup
+and disconnection diagnostics; ordinary measurements are not logged.
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("sr830").setLevel(logging.DEBUG)
+```
+
+The driver does not change global warning handling. Applications can call
+`logging.captureWarnings(True)` if they want Python warnings routed into logging.
+Serial binary-transfer warnings identify the caller's location and can also be
+handled through the standard `warnings` module.
+
+`instrument.errors` returns an error list without printing, logging, or issuing
+warnings. The application chooses how to report it:
+
+```python
+errors = instrument.errors
+if errors:
+    logging.getLogger(__name__).warning("Instrument reported errors: %s", ", ".join(errors))
+```
+
+Reading `errors` queries status registers and can clear their latched events;
+see the [SR830 status-register documentation](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf).
+The [logging example](examples/logging.py) configures output and warning capture
+at the application level.
+
+Hardware-free connection, settings, and logging tests can be run with:
 
 ```sh
 python -m unittest discover -s tests

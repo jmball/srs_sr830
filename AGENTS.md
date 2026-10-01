@@ -23,6 +23,7 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
 - `tests/test_connection.py`: hardware-free lifecycle and annotation checks,
   run with `python -m unittest discover -s tests`.
 - `tests/test_settings.py`: shared-table, enum, and integer compatibility checks.
+- `tests/test_logging.py`: logging/warning policy and status-decoding checks.
 - `pyproject.toml`: package metadata, package discovery, runtime dependencies
   (`pyvisa` and `pyvisa-py`), and the setuptools build backend. Keep installation
   configuration here; there is no `setup.cfg` or `setup.py`.
@@ -52,6 +53,10 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
   docstrings. Consult it when changing protocol behavior.
 - Python >=3.10 is required. Preserve this minimum unless the task changes
   compatibility.
+- Keep logging configuration in applications. The driver uses a module logger
+  with NullHandler and DEBUG lifecycle diagnostics; it must not configure the
+  root logger, capture warnings globally, or print. The `errors` property returns
+  its list silently. Serial-transfer warnings use `stacklevel=2`.
 - No CI, formatter, or linter is configured. Both packages ship `py.typed`.
   Driver annotations can be checked with `mypy --strict --follow-imports=silent
   src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py

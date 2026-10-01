@@ -22,7 +22,6 @@ from ._connection import connection_kwargs, resolve_output_interface
 from .settings import _Settings
 
 
-logging.captureWarnings(True)
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
@@ -134,6 +133,11 @@ class sr830(_Settings):
             for key in ("access_mode", "open_timeout", "resource_pyclass")
             if key in kwargs
         }
+        logger.debug(
+            "Opening SR830 resource %s with %s output",
+            resource_name,
+            self.output_interfaces[interface],
+        )
         resource = manager.open_resource(resource_name, **opening_kwargs)
         try:
             if not isinstance(resource, MessageBasedResource):
@@ -151,6 +155,7 @@ class sr830(_Settings):
                 resource.close()
             raise
         self._instr = resource
+        logger.debug("SR830 connection initialized: %s", resource_name)
 
     def disconnect(self) -> None:
         """Return to local mode and close the resource; repeated calls are harmless.
@@ -162,6 +167,7 @@ class sr830(_Settings):
         if resource is None:
             return
         self._instr = None
+        logger.debug("Disconnecting SR830 resource %s", resource)
         try:
             resource.write("LOCL 0")
         except pyvisa.errors.InvalidSession:
@@ -173,6 +179,7 @@ class sr830(_Settings):
             raise
         else:
             resource.close()
+        logger.debug("SR830 resource disconnected: %s", resource)
 
     def enable_all_status_bytes(self) -> None:
         """Enable all status bytes."""
@@ -182,14 +189,19 @@ class sr830(_Settings):
 
     @property
     def errors(self) -> list[str]:
-        """Check for errors.
+        """Check for errors without printing, logging, or issuing warnings.
 
         Returns
         -------
         errors : list
             List of errors.
+
+        Notes
+        -----
+        Reading the error, LIA, and standard-event status registers clears their
+        latched bits. The caller decides how to report the returned errors.
         """
-        sp = format(self.get_status_byte("serial_poll"), "b")
+        sp = format(self.get_status_byte("serial_poll"), "08b")[::-1]
         errors = []
 
         # check if the interface output buffer is non-empty
@@ -198,14 +210,14 @@ class sr830(_Settings):
 
         # if any bits in error status byte are enabled check if they constitute an error
         if sp[2] == "1":
-            esb = format(self.get_status_byte("error"), "b")
+            esb = format(self.get_status_byte("error"), "08b")[::-1]
             for i, bit in enumerate(esb):
                 if bit == "1":
                     errors.append(self._error_status_byte[i][1])
 
         # if any bits in LIA status byte are enabled check if they constitute an error
         if sp[3] == "1":
-            lsb = format(self.get_status_byte("lia_status"), "b")
+            lsb = format(self.get_status_byte("lia_status"), "08b")[::-1]
             for i, bit in enumerate(lsb[:4]):
                 if bit == "1":
                     errors.append(self._lia_status_byte[i][1])
@@ -213,15 +225,11 @@ class sr830(_Settings):
         # if any bits in standard event status byte are enabled check if they
         # constitute an error
         if sp[5] == "1":
-            sesb = format(self.get_status_byte("standard_event"), "b")
+            sesb = format(self.get_status_byte("standard_event"), "08b")[::-1]
             sesb_error_bits = [0, 2, 4, 5]
             for i in sesb_error_bits:
                 if sesb[i] == "1":
                     errors.append(self._standard_event_status_byte[i][1])
-
-        if len(errors) != 0:
-            print(f"Instrument reported errors: {', '.join(errors)}.")
-            warnings.warn(f"Instrument reported errors: {', '.join(errors)}.")
 
         return errors
 
@@ -1676,7 +1684,8 @@ class sr830(_Settings):
             output_interface = self.output_interfaces[self.output_interface]
             if output_interface == "RS232":
                 warnings.warn(
-                    f"SRS recommends not using binary transfers over serial interfaces."
+                    "SRS recommends not using binary transfers over serial interfaces.",
+                    stacklevel=2,
                 )
 
             # pause storage if loop mode
@@ -1742,7 +1751,8 @@ class sr830(_Settings):
             output_interface = self.output_interfaces[self.output_interface]
             if output_interface == "RS232":
                 warnings.warn(
-                    f"SRS recommends not using binary transfers over serial interfaces."
+                    "SRS recommends not using binary transfers over serial interfaces.",
+                    stacklevel=2,
                 )
 
             # pause storage if loop mode
