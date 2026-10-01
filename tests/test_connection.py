@@ -34,7 +34,6 @@ class ConnectionTests(unittest.TestCase):
         self.connect(baud_rate=19200, open_timeout=1000)
         self.manager.open_resource.assert_called_once_with('alias', open_timeout=1000)
         self.assertIs(self.driver._instr, self.resource)
-        self.assertIs(self.driver._resource_manager, self.manager)
         self.assertEqual(self.resource.read_termination, '\r')
         self.assertEqual(self.resource.write_termination, '\n')
         self.assertEqual(self.resource.baud_rate, 19200)
@@ -91,7 +90,6 @@ class ConnectionTests(unittest.TestCase):
                 self.connect()
             self.resource.close.assert_called_once()
             self.assertIsNone(self.driver._instr)
-            self.assertIsNone(self.driver._resource_manager)
             self.manager.close.assert_not_called()
         self.resource.write.side_effect = None
         self.connect()  # Retry after failure.
@@ -133,7 +131,6 @@ class ConnectionTests(unittest.TestCase):
         self.driver.disconnect()
         self.resource.close.assert_called_once()
         self.assertIsNone(self.driver._instr)
-        self.assertIsNone(self.driver._resource_manager)
         self.manager.close.assert_not_called()
         self.connect()
 
@@ -152,7 +149,6 @@ class ConnectionTests(unittest.TestCase):
         with self.assertRaisesRegex(OSError, 'close failed'):
             self.driver.disconnect()
         self.assertIsNone(self.driver._instr)
-        self.assertIsNone(self.driver._resource_manager)
         self.driver.disconnect()
 
     def test_disconnect_tolerates_an_externally_closed_resource(self):
@@ -170,10 +166,10 @@ class ConnectionTests(unittest.TestCase):
         resource.close.assert_called_once()
         self.assertIsNone(self.driver._instr)
 
-    def test_default_manager_is_retained_but_not_closed(self):
+    def test_default_manager_is_used_but_not_closed(self):
         with patch('sr830.sr830.pyvisa.ResourceManager', return_value=self.manager):
             self.driver.connect('ASRL1::INSTR')
-        self.assertIs(self.driver._resource_manager, self.manager)
+        self.manager.open_resource.assert_called_once_with('ASRL1::INSTR')
         self.driver.disconnect()
         self.manager.close.assert_not_called()
 

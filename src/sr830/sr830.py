@@ -37,7 +37,6 @@ class sr830(_Settings):
 
     def __init__(self) -> None:
         self._instr: MessageBasedResource | None = None
-        self._resource_manager: pyvisa.ResourceManager | None = None
 
     def _get_instr(self) -> MessageBasedResource:
         """Return the connected resource or fail before attempting I/O."""
@@ -91,8 +90,8 @@ class sr830(_Settings):
         resource_name : str
             VISA resource name or alias.
         resource_manager : pyvisa.ResourceManager, optional
-            Manager to use, or the default backend's manager. Retained until
-            disconnect. Caller-supplied managers remain caller-owned. Managers
+            Manager to use, or the default backend's manager. The VISA resource
+            retains it. Caller-supplied managers remain caller-owned. Managers
             are never closed here because PyVISA shares backend sessions.
         output_interface : {0, 1}, optional
             Instrument-side response interface: 0 (RS232) or 1 (GPIB). Inferred
@@ -151,7 +150,6 @@ class sr830(_Settings):
             with suppress(Exception):
                 resource.close()
             raise
-        self._resource_manager = manager
         self._instr = resource
 
     def disconnect(self) -> None:
@@ -165,19 +163,16 @@ class sr830(_Settings):
             return
         self._instr = None
         try:
-            try:
-                resource.write("LOCL 0")
-            except pyvisa.errors.InvalidSession:
-                # The caller may already have closed the exposed VISA resource.
+            resource.write("LOCL 0")
+        except pyvisa.errors.InvalidSession:
+            # The underlying VISA resource may already have been closed.
+            resource.close()
+        except BaseException:
+            with suppress(Exception):
                 resource.close()
-            except BaseException:
-                with suppress(Exception):
-                    resource.close()
-                raise
-            else:
-                resource.close()
-        finally:
-            self._resource_manager = None
+            raise
+        else:
+            resource.close()
 
     def enable_all_status_bytes(self) -> None:
         """Enable all status bytes."""

@@ -95,8 +95,9 @@ for ambiguous adapters. Local mode and lockout are explicit caller settings via
 no `LOCL` command. Connection options are keyword-only,
 conflicting framing is rejected, and connecting twice raises. Disconnect clears
 `_instr`, is idempotent, and closes only the resource; managers remain open
-because PyVISA shares them. Disconnect after hardware work; the hardware
-driver's context manager calls `disconnect()` on exit.
+because PyVISA shares them. The VISA resource retains its manager; the driver
+does not store a separate manager reference. Disconnect after hardware work;
+the hardware driver's context manager calls `disconnect()` on exit.
 
 ## Development VM environment
 

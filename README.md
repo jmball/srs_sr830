@@ -73,8 +73,8 @@ an already connected instance raises `RuntimeError`; call `disconnect()` first.
 Disconnect returns the instrument to local mode, closes its resource, clears
 the connection, and tolerates repeated calls.
 
-Pass `resource_manager=` to use an existing PyVISA manager. The driver retains
-that manager throughout the connection. Caller-supplied managers remain
+Pass `resource_manager=` to use an existing PyVISA manager. The VISA resource
+retains that manager throughout the connection. Caller-supplied managers remain
 caller-owned; the driver closes only its instrument resource. It also leaves
 default managers open because PyVISA shares managers and backend sessions across
 connections. Close managers at the application level when all their resources
