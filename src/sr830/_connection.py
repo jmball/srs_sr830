@@ -33,8 +33,6 @@ def connection_kwargs(
     interface_type: InterfaceType,
 ) -> dict[str, Any]:
     """Validate framing and supply protocol defaults without overwriting callers."""
-    if "reset" in resource_kwargs:
-        raise TypeError("connect() no longer accepts reset; call reset() explicitly.")
     kwargs = resource_kwargs.copy()
     read_termination = "\r" if output_interface == 0 else "\n"
     if "read_termination" in kwargs and kwargs["read_termination"] != read_termination:

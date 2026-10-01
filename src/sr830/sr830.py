@@ -134,12 +134,6 @@ class sr830(_Settings):
         """
         if self._instr is not None:
             raise RuntimeError("Instrument is already connected; disconnect first.")
-        if "reset" in resource_kwargs:
-            raise TypeError("connect() no longer accepts reset; call reset() explicitly.")
-        if "local_lockout" in resource_kwargs:
-            raise TypeError(
-                "connect() no longer accepts local_lockout; set local_mode explicitly."
-            )
         manager = (
             resource_manager if resource_manager is not None else pyvisa.ResourceManager()
         )

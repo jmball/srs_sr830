@@ -66,7 +66,7 @@ class ConnectionTests(unittest.TestCase):
     def test_conflicts_are_rejected_before_opening(self):
         for kwargs in (
             {'read_termination': '\n'}, {'write_termination': 'x'},
-            {'write_termination': None}, {'output_interface': 2}, {'reset': True},
+            {'write_termination': None}, {'output_interface': 2},
             {'output_interface': 1, 'write_termination': None, 'send_end': False},
         ):
             with self.subTest(kwargs=kwargs), self.assertRaises((ValueError, TypeError)):
@@ -256,8 +256,6 @@ class ConnectionTests(unittest.TestCase):
         virtual.disconnect()
         with self.assertRaises(ValueError):
             virtual.connect('ASRL1::INSTR', read_termination='\n')
-        with self.assertRaises(TypeError):
-            virtual.connect('ASRL1::INSTR', reset=False)
 
     def test_tcpip_adapters_require_command_terminator(self):
         self.manager.resource_info.return_value.interface_type = InterfaceType.tcpip
@@ -280,17 +278,6 @@ class ConnectionTests(unittest.TestCase):
                 virtual.local_mode = mode
                 virtual.connect('ASRL1::INSTR')
                 self.assertEqual(virtual.local_mode, mode)
-
-    def test_removed_local_lockout_option_is_rejected_before_opening(self):
-        for value in (False, True):
-            with self.subTest(value=value):
-                with self.assertRaisesRegex(TypeError, 'set local_mode explicitly'):
-                    self.connect(local_lockout=value)
-                virtual = VirtualSR830()
-                with self.assertRaisesRegex(TypeError, 'set local_mode explicitly'):
-                    virtual.connect('ASRL1::INSTR', local_lockout=value)
-                self.assertFalse(virtual._connected)
-        self.manager.open_resource.assert_not_called()
 
     def test_getters_query_responses(self):
         self.connect()

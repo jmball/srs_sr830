@@ -61,11 +61,9 @@ instrument.connect("ASRL2::INSTR")
 instrument.local_mode = 2  # Disable the front-panel Local key.
 ```
 
-`local_lockout=` is no longer accepted by `connect()`. GPIB commands can still
-put the instrument into remote mode automatically. Connection preserves
-measurement settings and does not reset the instrument. Call
-`instrument.reset()` explicitly when wanted; `reset=` is no longer accepted by
-`connect()`.
+GPIB commands can still put the instrument into remote mode automatically.
+Connection preserves measurement settings and does not reset the instrument.
+Call `instrument.reset()` explicitly when wanted.
 
 Initialization failures close the opened resource and leave the instance
 disconnected. Commands already sent cannot be rolled back. Calling `connect()` on

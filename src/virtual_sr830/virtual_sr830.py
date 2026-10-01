@@ -103,12 +103,6 @@ class sr830(_Settings):
         """
         if self._connected:
             raise RuntimeError("Instrument is already connected; disconnect first.")
-        if "reset" in resource_kwargs:
-            raise TypeError("connect() no longer accepts reset; call reset() explicitly.")
-        if "local_lockout" in resource_kwargs:
-            raise TypeError(
-                "connect() no longer accepts local_lockout; set local_mode explicitly."
-            )
         if resource_manager is not None:
             interface_type = resource_manager.resource_info(resource_name).interface_type
         else:
