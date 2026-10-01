@@ -85,7 +85,41 @@ Both packages ship inline type hints. `measure_multiple()` returns an iterator
 of floats; buffer readers return tuples. The virtual status-register getters
 remain unimplemented and return `None`.
 
-Hardware-free connection tests can be run with:
+## Named settings and value tables
+
+Named settings accept `IntEnum` members as well as the existing integer codes:
+
+```python
+from sr830 import LocalMode, ReferenceSource, sr830
+
+with sr830() as instrument:
+    instrument.connect("ASRL2::INSTR")
+    instrument.local_mode = LocalMode.LOCAL_LOCKOUT
+    instrument.reference_source = ReferenceSource.INTERNAL
+    instrument.time_constant = 8  # Instrument code for 100 ms.
+    print(instrument.time_constants[instrument.time_constant])  # Seconds.
+```
+
+The enum types are defined in `sr830.settings` and exported by both `sr830` and
+`virtual_sr830`. They cover reference source/trigger, input configuration,
+grounding/coupling, filters, reserve mode, channel displays/ratios, output source
+and interface, on/off settings, buffer/trigger modes, data transfer, and local
+mode. For example, use `OutputInterface.GPIB` for an adapter's output interface
+or `SwitchState.ON` for the alarm. Getters continue to return integer codes;
+convert with `LocalMode(instrument.local_mode)` when an enum is wanted.
+
+Both drivers inherit one shared set of `ClassVar` tables. Existing names,
+indices, labels, and numeric values are preserved; the table contents are
+immutable. Numeric quantities remain tuples: `time_constants` contains seconds,
+`low_pass_filter_slopes` contains dB/octave, and `sample_rates` contains Hz plus
+the final `"Trigger"` entry. `sensitivities` contains volts for voltage inputs
+and microamps for current inputs: index `0` represents 2 nV or 2 fA, and index
+`26` represents 1 V or 1 µA. The legacy `expands[0]` value of `0` denotes no
+expansion (gain 1). Setters still accept table indices rather than physical
+quantities. See the [SR830 programming manual](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf)
+for instrument codes and units.
+
+Hardware-free connection and settings tests can be run with:
 
 ```sh
 python -m unittest discover -s tests

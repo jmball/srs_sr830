@@ -4,19 +4,21 @@ from typing import Any
 
 from pyvisa.constants import InterfaceType
 
+from .settings import OutputInterface
+
 
 def resolve_output_interface(
     interface_type: InterfaceType, output_interface: int | None
 ) -> int:
     """Infer direct VISA interfaces, requiring an override for adapters."""
     if output_interface is not None:
-        if output_interface not in (0, 1):
+        if output_interface not in (OutputInterface.RS232, OutputInterface.GPIB):
             raise ValueError("output_interface must be 0 (RS232) or 1 (GPIB).")
-        return output_interface
+        return int(output_interface)
     if interface_type == InterfaceType.asrl:
-        return 0
+        return int(OutputInterface.RS232)
     if interface_type == InterfaceType.gpib:
-        return 1
+        return int(OutputInterface.GPIB)
     raise ValueError(
         "Cannot infer the SR830 interface from this VISA resource. "
         "Specify output_interface=0 (RS232) or output_interface=1 (GPIB) "

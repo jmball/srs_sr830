@@ -17,8 +17,12 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
 - `examples/logging.py`: logging and serial connection example. Running it
   opens a real resource.
 - `src/sr830/_connection.py`: shared interface inference and framing validation.
+- `src/sr830/settings.py`: shared immutable `ClassVar` tables and public
+  `IntEnum` command codes, inherited by both drivers. Preserve public tuple
+  names, labels, and indices. Numerical table values have documented units.
 - `tests/test_connection.py`: hardware-free lifecycle and annotation checks,
   run with `python -m unittest discover -s tests`.
+- `tests/test_settings.py`: shared-table, enum, and integer compatibility checks.
 - `pyproject.toml`: package metadata, package discovery, runtime dependencies
   (`pyvisa` and `pyvisa-py`), and the setuptools build backend. Keep installation
   configuration here; there is no `setup.cfg` or `setup.py`.
@@ -34,6 +38,10 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
 - When changing a shared setting or method, inspect both implementations and
   update the virtual instrument where appropriate. Keep its dummy defaults and
   validation consistent with the intended hardware interface.
+- Define setting tables and enum codes only in `src/sr830/settings.py`; both
+  packages export the same enums. Existing integer calls and getter return types
+  remain supported. Sensitivities are in V for voltage inputs and microamps for
+  current inputs; time constants are in seconds, and sample rates are in Hz.
 - Follow the existing four-space indentation, snake_case methods and properties,
   and NumPy-style docstrings describing parameters, ranges, and units.
 - Hardware getters query `self.instr`; setters validate values before writing
@@ -45,7 +53,7 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
   compatibility.
 - No CI, formatter, or linter is configured. Both packages ship `py.typed`.
   Driver annotations can be checked with `mypy --strict --follow-imports=silent
-  src/sr830/sr830.py src/sr830/_connection.py
+  src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py
   src/virtual_sr830/virtual_sr830.py` (install mypy separately).
 
 ## Setup and validation

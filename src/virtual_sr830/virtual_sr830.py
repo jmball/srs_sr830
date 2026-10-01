@@ -12,240 +12,13 @@ from typing import Any
 import pyvisa
 from pyvisa.constants import InterfaceType
 from sr830._connection import connection_kwargs, resolve_output_interface
+from sr830.settings import _Settings
 
 import warnings
 
 
-class sr830:
+class sr830(_Settings):
     """Virtual Stanford Research Systems SR830 LIA instrument."""
-
-    # --- class variables ---
-
-    reference_sources = ("external", "internal")
-
-    triggers = ("zero crossing", "TTL rising egde", "TTL falling edge")
-
-    input_configurations = ("A", "A-B", "I (1 MOhm)", "I (100 MOhm)")
-
-    groundings = ("Float", "Ground")
-
-    input_couplings = ("AC", "DC")
-
-    input_line_notch_filter_statuses = (
-        "no filters",
-        "Line notch in",
-        "2 x Line notch in",
-        "Both notch filters in",
-    )
-
-    sensitivities = (
-        2e-9,
-        5e-9,
-        10e-9,
-        20e-9,
-        50e-9,
-        100e-9,
-        200e-9,
-        500e-9,
-        1e-6,
-        2e-6,
-        5e-6,
-        10e-6,
-        20e-6,
-        50e-6,
-        100e-6,
-        200e-6,
-        500e-6,
-        1e-3,
-        2e-3,
-        5e-3,
-        10e-3,
-        20e-3,
-        50e-3,
-        100e-3,
-        200e-3,
-        500e-3,
-        1.0,
-    )
-
-    reserve_modes = ("High reserve", "Normal", "Low noise")
-
-    time_constants = (
-        10e-6,
-        30e-6,
-        100e-6,
-        300e-6,
-        1e-3,
-        3e-3,
-        10e-3,
-        30e-3,
-        100e-3,
-        300e-3,
-        1.0,
-        3.0,
-        10.0,
-        30.0,
-        100.0,
-        300.0,
-        1e3,
-        3e3,
-        10e3,
-        30e3,
-    )
-
-    low_pass_filter_slopes = (6, 12, 18, 24)
-
-    synchronous_filter_statuses = ("Off", "below 200 Hz")
-
-    display_ch1 = ("X", "R", "X Noise", "Aux In 1", "Aux In 2")
-
-    display_ch2 = ("Y", "Phase", "Y Noise", "Aux In 3", "Aux In 4")
-
-    ratio_ch1 = ("none", "Aux In 1", "Aux In 2")
-
-    ratio_ch2 = ("none", "Aux In 3", "Aux In 4")
-
-    front_panel_output_sources_ch1 = ("CH1 display", "X")
-
-    front_panel_output_sources_ch2 = ("CH2 display", "Y")
-
-    expands = (0, 10, 100)
-
-    output_interfaces = ("RS232", "GPIB")
-
-    key_click_states = ("Off", "On")
-
-    alarm_statuses = ("Off", "On")
-
-    sample_rates = (
-        62.5e-3,
-        125e-3,
-        250e-3,
-        500e-3,
-        1,
-        2,
-        4,
-        8,
-        16,
-        32,
-        64,
-        128,
-        256,
-        512,
-        "Trigger",
-    )
-
-    end_of_buffer_modes = ("1 Shot", "Loop")
-
-    trigger_start_modes = ("Off", "Start scan")
-
-    data_transfer_modes = ("Off", "On (DOS)", "On (Windows)")
-
-    local_modes = ("Local", "Remote", "Local lockout")
-
-    gpib_override_remote_conditions = ("No", "Yes")
-
-    # --- private class variables ---
-
-    _enable_register_cmd_dict = {
-        "standard_event": "*ESE",
-        "serial_poll": "*SRE",
-        "error": "ERRE",
-        "lia_status": "LIAE",
-    }
-
-    _status_byte_cmd_dict = {
-        "standard_event": "*ESR?",
-        "serial_poll": "*STB?",
-        "error": "ERRS?",
-        "lia_status": "LIAS?",
-    }
-
-    # Meaning of status bits. Indices of outer list are same are bit numbers.
-    # Indices of inner lists give description of event or state.
-    _serial_poll_status_bit_names = [
-        "SCN",
-        "IFC",
-        "ERR",
-        "LIA",
-        "MAV",
-        "ESB",
-        "SRQ",
-        "Unused",
-    ]
-    _serial_poll_status_byte = [
-        ["", "No scan in progress"],
-        ["", "No command execution in progress"],
-        ["", "An enabled bit in error status byte has been set"],
-        ["", "An enabled bit in LIA status byte has been set"],
-        ["", "Interface output buffer is non-empty"],
-        ["", "An enabled bit in standard status byte has been set"],
-        ["", "A service request has occured"],
-        ["", ""],
-    ]
-
-    _standard_event_status_bit_names = [
-        "INP",
-        "Unused",
-        "QRY",
-        "Unused",
-        "EXE",
-        "CMD",
-        "URQ",
-        "PON",
-    ]
-    _standard_event_status_byte = [
-        ["", "Input queue overflow"],
-        ["", ""],
-        ["", "Output queue overflow"],
-        ["", ""],
-        ["", "Command cannot execute/parameter out of range"],
-        ["", "Received illegal command"],
-        ["", "Key pressed/knob rotated"],
-        ["", "Power-on"],
-    ]
-
-    _lia_status_bit_names = [
-        "INPUT/RESRV",
-        "FILTR",
-        "OUTPUT",
-        "UNLK",
-        "RANGE",
-        "TC",
-        "TRIG",
-        "Unused",
-    ]
-    _lia_status_byte = [
-        ["", "Input or amplifier overload"],
-        ["", "Time constant filter overload"],
-        ["", "Output overload"],
-        ["", "Reference unlock detected"],
-        ["", "Detection frequency switched range"],
-        ["", "Time constant changed indirectly"],
-        ["", "Data storage triggered"],
-        ["", ""],
-    ]
-
-    _error_status_bit_names = [
-        "Unused",
-        "Backup error",
-        "RAM error",
-        "Unused",
-        "ROM error",
-        "GPIB error",
-        "DSP error",
-        "Math error",
-    ]
-    _error_status_byte = [
-        ["", ""],
-        ["", "Battery backup has failed"],
-        ["", "RAM memory test found error"],
-        ["", ""],
-        ["", "ROM memory test found error"],
-        ["", "GPIB fast data transfer mode aborted"],
-        ["", "DSP test found error"],
-        ["", "Internal math error"],
-    ]
 
     def __init__(self) -> None:
         """Initialise dummy properties."""
@@ -423,7 +196,7 @@ class sr830:
                 * 1 : internal
         """
         if source in [0, 1]:
-            self._reference_source = source
+            self._reference_source = int(source)
         else:
             raise ValueError(
                 f"Invalid reference source: {source}. Must be 0 (external) or 1 "
@@ -487,7 +260,7 @@ class sr830:
                 * 2: TTL falling edge
         """
         if trigger in [0, 1, 2]:
-            self._reference_trigger = trigger
+            self._reference_trigger = int(trigger)
         else:
             raise ValueError(
                 f"Invalid trigger type: {trigger}. Must be 0 (zero crossing), 1 "
@@ -580,7 +353,7 @@ class sr830:
                 * 3 : I (100 MOhm)
         """
         if config in range(4):
-            self._input_configuration = config
+            self._input_configuration = int(config)
         else:
             raise ValueError(
                 f"Invalid input configuration: {config}. Must be 0 (A), 1 (A-B), 2 "
@@ -614,7 +387,7 @@ class sr830:
                 * 1 : Ground
         """
         if grounding in [0, 1]:
-            self._input_shield_grounding = grounding
+            self._input_shield_grounding = int(grounding)
         else:
             raise ValueError(
                 f"Invalid input shield grounding: {grounding}. Must be 0 (float) or 1"
@@ -648,7 +421,7 @@ class sr830:
                 * 1 : DC
         """
         if coupling in [0, 1]:
-            self._input_coupling = coupling
+            self._input_coupling = int(coupling)
         else:
             raise ValueError(
                 f"Invalid input coupling: {coupling}. Must be 0 (AC) or 1 (DC)."
@@ -685,7 +458,7 @@ class sr830:
                 * 3 : Both notch filters in
         """
         if status in range(4):
-            self._line_notch_filter_status = status
+            self._line_notch_filter_status = int(status)
         else:
             raise ValueError(
                 f"Invalid line notch filter status: {status}. Must be 0 (no filters), "
@@ -808,7 +581,7 @@ class sr830:
                 * 2 : Low noise
         """
         if mode in range(3):
-            self._reserve_mode = mode
+            self._reserve_mode = int(mode)
         else:
             raise ValueError(
                 f"Invalid reserve mode: {mode}. Must be 0 (high), 1 (normal), or 2 "
@@ -949,7 +722,7 @@ class sr830:
                 * 1 : below 200 Hz
         """
         if status in [0, 1]:
-            self._sync_filter_status = status
+            self._sync_filter_status = int(status)
         else:
             raise ValueError(
                 f"Invalid synchronous filter status: {status}. Must be 0 (off) or 1 "
@@ -988,7 +761,7 @@ class sr830:
                 * 1 : GPIB
         """
         if interface in [0, 1]:
-            self._output_interface = interface
+            self._output_interface = int(interface)
         else:
             raise ValueError(
                 f"Invalid output interface: {interface}. Must be 0 (RS232) or 1 "
@@ -1038,11 +811,11 @@ class sr830:
         """
         if (channel in [1, 2]) and (display in range(5)) and (ratio in range(3)):
             if channel == 1:
-                self._ch1_display = display
-                self._ch1_ratio = ratio
+                self._ch1_display = int(display)
+                self._ch1_ratio = int(ratio)
             elif channel == 2:
-                self._ch2_display = display
-                self._ch2_ratio = ratio
+                self._ch2_display = int(display)
+                self._ch2_ratio = int(ratio)
         else:
             raise ValueError(
                 f"Invalid channel, display, or ratio: {channel}, {display}, or {ratio}"
@@ -1124,9 +897,9 @@ class sr830:
         """
         if (channel in [1, 2]) and (output in [0, 1]):
             if channel == 1:
-                self._ch1_output = output
+                self._ch1_output = int(output)
             elif channel == 2:
-                self._ch2_output = output
+                self._ch2_output = int(output)
         else:
             raise ValueError(
                 f"Invalid channel or output: {channel} or {output}. Channel must be 0 "
@@ -1379,7 +1152,7 @@ class sr830:
                 * 1 : On
         """
         if state in [0, 1]:
-            self._key_click_state = state
+            self._key_click_state = int(state)
         else:
             raise ValueError(
                 f"Invalid key click state: {state}. Must be 0 (off) or 1 (on)."
@@ -1416,7 +1189,7 @@ class sr830:
                 * 1 : On
         """
         if status in [0, 1]:
-            self._alarm_status = status
+            self._alarm_status = int(status)
         else:
             raise ValueError(
                 f"Invalid alarm status: {status}. Must be 0 (off) or 1 (on)."
@@ -1562,7 +1335,7 @@ class sr830:
                 * 1 : Loop
         """
         if mode in [0, 1]:
-            self._end_of_buffer_mode = mode
+            self._end_of_buffer_mode = int(mode)
         else:
             raise ValueError(
                 f"Invalid end of buffer mode: {mode}. Must be 0 (1 shot) or 1 (loop)."
@@ -1599,7 +1372,7 @@ class sr830:
                 * 1 : Start scan
         """
         if mode in [0, 1]:
-            self._trigger_start_mode = mode
+            self._trigger_start_mode = int(mode)
         else:
             raise ValueError(
                 f"Invalid trigger start mode: {mode}. Must be 0 (off) or 1 "
@@ -1912,7 +1685,7 @@ class sr830:
                 * 2 : On (Windows)
         """
         if mode in range(3):
-            self._data_transfer_mode = mode
+            self._data_transfer_mode = int(mode)
         else:
             raise ValueError(
                 f"Invalid data transfer mode: {mode}. Must be 0 (off), 1 (on [DOS]), "
@@ -1970,7 +1743,7 @@ class sr830:
                 * 2 : LOCAL LOCKOUT
         """
         if mode in range(3):
-            self._local_mode = mode
+            self._local_mode = int(mode)
         else:
             raise ValueError(
                 f"Invalid local mode: {mode}. Must be 0 (local), 1 (remote), or 2 "
@@ -2010,7 +1783,7 @@ class sr830:
                 * 1 : Yes
         """
         if condition in [0, 1]:
-            self._gpib_override_remote = condition
+            self._gpib_override_remote = int(condition)
         else:
             raise ValueError(
                 f"Invalid GPIB override remote condition: {condition}. Must be 0 (no) "
@@ -2128,7 +1901,7 @@ class sr830:
                 * 1 : Set, all status and enable registers are cleared on power up.
         """
         if value in [0, 1]:
-            self._power_on_status_clear_bit = value
+            self._power_on_status_clear_bit = int(value)
         else:
             raise ValueError(
                 f"Invalid power on status clear bit: {value}. Must be 0 (cleared) or 1"
