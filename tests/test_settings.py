@@ -83,8 +83,8 @@ class SettingsTests(unittest.TestCase):
         for cls in (sr830.sr830, virtual_sr830.sr830):
             driver = cls()
             if cls is sr830.sr830:
-                driver.instr = Mock(spec=MessageBasedResource)
-                driver.instr.query.side_effect = ['0', '19']
+                driver._instr = Mock(spec=MessageBasedResource)
+                driver._instr.query.side_effect = ['0', '19']
             else:
                 driver.sensitivity = 0
                 driver.time_constant = 19
@@ -114,14 +114,14 @@ class SettingsTests(unittest.TestCase):
 
     def test_enums_and_integers_emit_identical_commands(self):
         hardware = sr830.sr830()
-        hardware.instr = Mock(spec=MessageBasedResource)
+        hardware._instr = Mock(spec=MessageBasedResource)
         virtual = virtual_sr830.sr830()
         for name, code, command in PROPERTY_CODES:
             for value in (code, int(code)):
                 with self.subTest(name=name, value=value):
                     setattr(hardware, name, value)
-                    hardware.instr.write.assert_called_with(f'{command} {int(code)}')
-                    hardware.instr.query.return_value = str(int(code))
+                    hardware._instr.write.assert_called_with(f'{command} {int(code)}')
+                    hardware._instr.query.return_value = str(int(code))
                     result = getattr(hardware, name)
                     self.assertIs(type(result), int)
                     self.assertEqual(result, int(code))
@@ -141,20 +141,20 @@ class SettingsTests(unittest.TestCase):
 
     def test_display_enums_preserve_integer_tuple_returns(self):
         hardware = sr830.sr830()
-        hardware.instr = Mock(spec=MessageBasedResource)
+        hardware._instr = Mock(spec=MessageBasedResource)
         virtual = virtual_sr830.sr830()
         for channel, display, ratio in (
             (1, settings.Channel1Display.AUX_IN_2, settings.Channel1Ratio.AUX_IN_1),
             (2, settings.Channel2Display.PHASE, settings.Channel2Ratio.AUX_IN_4),
         ):
             hardware.set_display(channel, display, ratio)
-            hardware.instr.write.assert_called_with(f'DDEF {channel}, {int(display)}, {int(ratio)}')
+            hardware._instr.write.assert_called_with(f'DDEF {channel}, {int(display)}, {int(ratio)}')
             virtual.set_display(channel, display, ratio)
             result = virtual.get_display(channel)
             self.assertEqual(result, (int(display), int(ratio)))
             self.assertTrue(all(type(value) is int for value in result))
             hardware.set_front_output(channel, settings.FrontPanelOutputSource.COMPONENT)
-            hardware.instr.write.assert_called_with(f'FPOP {channel}, 1')
+            hardware._instr.write.assert_called_with(f'FPOP {channel}, 1')
             virtual.set_front_output(channel, settings.FrontPanelOutputSource.COMPONENT)
             self.assertIs(type(virtual.get_front_output(channel)), int)
             self.assertEqual(virtual.get_front_output(channel), 1)

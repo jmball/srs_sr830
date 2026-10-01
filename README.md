@@ -67,11 +67,11 @@ measurement settings and does not reset the instrument. Call
 `instrument.reset()` explicitly when wanted; `reset=` is no longer accepted by
 `connect()`.
 
-Initialization failures close the opened resource and leave `instrument.instr`
-as `None`. Commands already sent cannot be rolled back. Calling `connect()` on
+Initialization failures close the opened resource and leave the instance
+disconnected. Commands already sent cannot be rolled back. Calling `connect()` on
 an already connected instance raises `RuntimeError`; call `disconnect()` first.
 Disconnect returns the instrument to local mode, closes its resource, clears
-`instr`, and tolerates repeated calls.
+the connection, and tolerates repeated calls.
 
 Pass `resource_manager=` to use an existing PyVISA manager. The driver retains
 that manager throughout the connection. Caller-supplied managers remain

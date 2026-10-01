@@ -30,24 +30,24 @@ logger.addHandler(logging.NullHandler())
 class sr830(_Settings):
     """Stanford Research Systems SR830 LIA instrument.
 
-    Use the `connect()` method to open a connection to the instrument and instantiate
-    the VISA resource attribute `instr` for an sr830 instance. This attribute can be
-    used to access all of the PyVISA attributes and methods for the resource.
+    Use connect() to open a VISA connection and disconnect() to close it.
+    The resource is stored privately in _instr; driver I/O uses _get_instr() to
+    obtain it or raise RuntimeError when disconnected.
     """
 
     def __init__(self) -> None:
-        self.instr: MessageBasedResource | None = None
+        self._instr: MessageBasedResource | None = None
         self._resource_manager: pyvisa.ResourceManager | None = None
 
-    def _require_instr(self) -> MessageBasedResource:
+    def _get_instr(self) -> MessageBasedResource:
         """Return the connected resource or fail before attempting I/O."""
-        if self.instr is None:
+        if self._instr is None:
             raise RuntimeError("Instrument is not connected.")
-        return self.instr
+        return self._instr
 
     def _read_buffer_bytes(self, command: str, size: int) -> bytes:
         """Read a headerless SR830 buffer without interpreting CR/LF as framing."""
-        resource = self._require_instr()
+        resource = self._get_instr()
         termination = resource.read_termination
         serial_end = resource.end_input if isinstance(resource, SerialInstrument) else None
         try:
@@ -108,13 +108,13 @@ class sr830(_Settings):
         -----
         The driver owns the opened resource. A second connect raises RuntimeError
         until disconnect is called. Initialization selects the response interface,
-        and enables status registers before publishing instr. Set local_mode
+        and enables status registers before storing _instr. Set local_mode
         explicitly after connecting to select remote mode or local lockout.
         Failures close the resource and leave the instance disconnected; commands
         already sent to the instrument cannot be rolled back. Call reset()
         explicitly if a factory reset is wanted.
         """
-        if self.instr is not None:
+        if self._instr is not None:
             raise RuntimeError("Instrument is already connected; disconnect first.")
         if "reset" in resource_kwargs:
             raise TypeError("connect() no longer accepts reset; call reset() explicitly.")
@@ -152,7 +152,7 @@ class sr830(_Settings):
                 resource.close()
             raise
         self._resource_manager = manager
-        self.instr = resource
+        self._instr = resource
 
     def disconnect(self) -> None:
         """Return to local mode and close the resource; repeated calls are harmless.
@@ -160,10 +160,10 @@ class sr830(_Settings):
         Always clear the connection, even if returning to local mode or closing
         fails. Resource managers remain open because their sessions may be shared.
         """
-        resource = self.instr
+        resource = self._instr
         if resource is None:
             return
-        self.instr = None
+        self._instr = None
         try:
             try:
                 resource.write("LOCL 0")
@@ -240,7 +240,7 @@ class sr830(_Settings):
         phase_shift : float
             Phase shift in degrees, -360 =< phase_shift =< 720.
         """
-        return float(self._require_instr().query("PHAS?"))
+        return float(self._get_instr().query("PHAS?"))
 
     @reference_phase_shift.setter
     def reference_phase_shift(self, phase_shift: float) -> None:
@@ -252,7 +252,7 @@ class sr830(_Settings):
             Phase shift in degrees, -360 =< phase_shift =< 720.
         """
         if (phase_shift >= -360) and (phase_shift <= 720):
-            self._require_instr().write(f"PHAS {phase_shift}")
+            self._get_instr().write(f"PHAS {phase_shift}")
         else:
             raise ValueError(
                 f"Invalid phase shift: {phase_shift}. Must be in range -360 - 720 "
@@ -271,7 +271,7 @@ class sr830(_Settings):
                 * 0 : external
                 * 1 : internal
         """
-        return int(self._require_instr().query("FMOD?"))
+        return int(self._get_instr().query("FMOD?"))
 
     @reference_source.setter
     def reference_source(self, source: int) -> None:
@@ -286,7 +286,7 @@ class sr830(_Settings):
                 * 1 : internal
         """
         if source in [0, 1]:
-            self._require_instr().write(f"FMOD {source}")
+            self._get_instr().write(f"FMOD {source}")
         else:
             raise ValueError(
                 f"Invalid reference source: {source}. Must be 0 (external) or 1 "
@@ -302,7 +302,7 @@ class sr830(_Settings):
         freq : float
             Frequency in Hz, 0.001 =< freq =< 102000.
         """
-        return float(self._require_instr().query("FREQ?"))
+        return float(self._get_instr().query("FREQ?"))
 
     @reference_frequency.setter
     def reference_frequency(self, freq: float) -> None:
@@ -314,7 +314,7 @@ class sr830(_Settings):
             Frequency in Hz, 0.001 =< freq =< 102000.
         """
         if (freq >= 0.001) and (freq <= 102000):
-            self._require_instr().write(f"FREQ {freq}")
+            self._get_instr().write(f"FREQ {freq}")
         else:
             raise ValueError(
                 f"Invalid reference frequency: {freq}. Must be in range 0.001 - 102000 "
@@ -334,7 +334,7 @@ class sr830(_Settings):
                 * 1: TTL rising egde
                 * 2: TTL falling edge
         """
-        return int(self._require_instr().query("RSLP?"))
+        return int(self._get_instr().query("RSLP?"))
 
     @reference_trigger.setter
     def reference_trigger(self, trigger: int) -> None:
@@ -350,7 +350,7 @@ class sr830(_Settings):
                 * 2: TTL falling edge
         """
         if trigger in [0, 1, 2]:
-            self._require_instr().write(f"RSLP {trigger}")
+            self._get_instr().write(f"RSLP {trigger}")
         else:
             raise ValueError(
                 f"Invalid trigger type: {trigger}. Must be 0 (zero crossing), 1 "
@@ -366,7 +366,7 @@ class sr830(_Settings):
         harmonic : int
             detection harmonic, 1 =< harmonic =< 19999
         """
-        return int(self._require_instr().query("HARM?"))
+        return int(self._get_instr().query("HARM?"))
 
     @harmonic.setter
     def harmonic(self, harmonic: int) -> None:
@@ -378,7 +378,7 @@ class sr830(_Settings):
             Detection harmonic, 1 =< harmonic =< 19999.
         """
         if (harmonic >= 1) and (harmonic <= 19999):
-            self._require_instr().write(f"HARM {harmonic}")
+            self._get_instr().write(f"HARM {harmonic}")
         else:
             raise ValueError(
                 f"Invalid detection harmonic: {harmonic}. Must be in range 1 - 19999."
@@ -393,7 +393,7 @@ class sr830(_Settings):
         amplitude : float
             sine amplitude in volts, 0.004 =< amplitude =< 5.000
         """
-        return float(self._require_instr().query("SLVL?"))
+        return float(self._get_instr().query("SLVL?"))
 
     @sine_amplitude.setter
     def sine_amplitude(self, amplitude: float) -> None:
@@ -405,7 +405,7 @@ class sr830(_Settings):
             sine amplitude in volts, 0.004 =< amplitude =< 5.000
         """
         if (amplitude >= 0.004) and (amplitude <= 5):
-            self._require_instr().write(f"SLVL {amplitude}")
+            self._get_instr().write(f"SLVL {amplitude}")
         else:
             raise ValueError(
                 f"Invalid sine output amplitude: {amplitude}. Must be in range 0.004 -"
@@ -426,7 +426,7 @@ class sr830(_Settings):
                 * 2 : I (1 MOhm)
                 * 3 : I (100 MOhm)
         """
-        return int(self._require_instr().query("ISRC?"))
+        return int(self._get_instr().query("ISRC?"))
 
     @input_configuration.setter
     def input_configuration(self, config: int) -> None:
@@ -443,7 +443,7 @@ class sr830(_Settings):
                 * 3 : I (100 MOhm)
         """
         if config in range(4):
-            self._require_instr().write(f"ISRC {config}")
+            self._get_instr().write(f"ISRC {config}")
         else:
             raise ValueError(
                 f"Invalid input configuration: {config}. Must be 0 (A), 1 (A-B), 2 "
@@ -462,7 +462,7 @@ class sr830(_Settings):
                 * 0 : Float
                 * 1 : Ground
         """
-        return int(self._require_instr().query("IGND?"))
+        return int(self._get_instr().query("IGND?"))
 
     @input_shield_grounding.setter
     def input_shield_grounding(self, grounding: int) -> None:
@@ -477,7 +477,7 @@ class sr830(_Settings):
                 * 1 : Ground
         """
         if grounding in [0, 1]:
-            self._require_instr().write(f"IGND {grounding}")
+            self._get_instr().write(f"IGND {grounding}")
         else:
             raise ValueError(
                 f"Invalid input shield grounding: {grounding}. Must be 0 (float) or 1"
@@ -496,7 +496,7 @@ class sr830(_Settings):
                 * 0 : AC
                 * 1 : DC
         """
-        return int(self._require_instr().query("ICPL?"))
+        return int(self._get_instr().query("ICPL?"))
 
     @input_coupling.setter
     def input_coupling(self, coupling: int) -> None:
@@ -511,7 +511,7 @@ class sr830(_Settings):
                 * 1 : DC
         """
         if coupling in [0, 1]:
-            self._require_instr().write(f"ICPL {coupling}")
+            self._get_instr().write(f"ICPL {coupling}")
         else:
             raise ValueError(
                 f"Invalid input coupling: {coupling}. Must be 0 (AC) or 1 (DC)."
@@ -531,7 +531,7 @@ class sr830(_Settings):
                 * 2 : 2 x Line notch in
                 * 3 : Both notch filters in
         """
-        return int(self._require_instr().query("ILIN?"))
+        return int(self._get_instr().query("ILIN?"))
 
     @line_notch_filter_status.setter
     def line_notch_filter_status(self, status: int) -> None:
@@ -548,7 +548,7 @@ class sr830(_Settings):
                 * 3 : Both notch filters in
         """
         if status in range(4):
-            self._require_instr().write(f"ILIN {status}")
+            self._get_instr().write(f"ILIN {status}")
         else:
             raise ValueError(
                 f"Invalid line notch filter status: {status}. Must be 0 (no filters), "
@@ -595,7 +595,7 @@ class sr830(_Settings):
                 * 25 : 500e-3
                 * 26 : 1
         """
-        return int(self._require_instr().query("SENS?"))
+        return int(self._get_instr().query("SENS?"))
 
     @sensitivity.setter
     def sensitivity(self, sensitivity: int) -> None:
@@ -635,7 +635,7 @@ class sr830(_Settings):
                 * 26 : 1
         """
         if sensitivity in range(27):
-            self._require_instr().write(f"SENS {sensitivity}")
+            self._get_instr().write(f"SENS {sensitivity}")
         else:
             raise ValueError(
                 f"Invalid sensitivity: {sensitivity}. Must be an integer in range 0 - "
@@ -655,7 +655,7 @@ class sr830(_Settings):
                 * 1 : Normal
                 * 2 : Low noise
         """
-        return int(self._require_instr().query("RMOD?"))
+        return int(self._get_instr().query("RMOD?"))
 
     @reserve_mode.setter
     def reserve_mode(self, mode: int) -> None:
@@ -671,7 +671,7 @@ class sr830(_Settings):
                 * 2 : Low noise
         """
         if mode in range(3):
-            self._require_instr().write(f"RMOD {mode}")
+            self._get_instr().write(f"RMOD {mode}")
         else:
             raise ValueError(
                 f"Invalid reserve mode: {mode}. Must be 0 (high), 1 (normal), or 2 "
@@ -708,7 +708,7 @@ class sr830(_Settings):
                 * 18 : 10e3
                 * 19 : 30e3
         """
-        return int(self._require_instr().query("OFLT?"))
+        return int(self._get_instr().query("OFLT?"))
 
     @time_constant.setter
     def time_constant(self, tc: int) -> None:
@@ -741,7 +741,7 @@ class sr830(_Settings):
                 * 19 : 30e3
         """
         if tc in range(20):
-            self._require_instr().write(f"OFLT {tc}")
+            self._get_instr().write(f"OFLT {tc}")
         else:
             raise ValueError(
                 f"Invalid time constant: {tc}. Must be an integer in range 0 - 19."
@@ -761,7 +761,7 @@ class sr830(_Settings):
                 * 2 : 18
                 * 3 : 24
         """
-        return int(self._require_instr().query("OFSL?"))
+        return int(self._get_instr().query("OFSL?"))
 
     @lowpass_filter_slope.setter
     def lowpass_filter_slope(self, slope: int) -> None:
@@ -778,7 +778,7 @@ class sr830(_Settings):
                 * 3 : 24
         """
         if slope in range(4):
-            self._require_instr().write(f"OFSL {slope}")
+            self._get_instr().write(f"OFSL {slope}")
         else:
             raise ValueError(
                 f"Invalid low-pass filter slope: {slope}. Must be 0 (6 dB/oct), 1 "
@@ -797,7 +797,7 @@ class sr830(_Settings):
                 * 0 : Off
                 * 1 : below 200 Hz
         """
-        return int(self._require_instr().query("SYNC?"))
+        return int(self._get_instr().query("SYNC?"))
 
     @sync_filter_status.setter
     def sync_filter_status(self, status: int) -> None:
@@ -812,7 +812,7 @@ class sr830(_Settings):
                 * 1 : below 200 Hz
         """
         if status in [0, 1]:
-            self._require_instr().write(f"SYNC {status}")
+            self._get_instr().write(f"SYNC {status}")
         else:
             raise ValueError(
                 f"Invalid synchronous filter status: {status}. Must be 0 (off) or 1 "
@@ -833,7 +833,7 @@ class sr830(_Settings):
                 * 0 : RS232
                 * 1 : GPIB
         """
-        return int(self._require_instr().query("OUTX?"))
+        return int(self._get_instr().query("OUTX?"))
 
     @output_interface.setter
     def output_interface(self, interface: int) -> None:
@@ -851,8 +851,8 @@ class sr830(_Settings):
                 * 1 : GPIB
         """
         if interface in [0, 1]:
-            self._require_instr().read_termination = "\r" if interface == 0 else "\n"
-            self._require_instr().write(f"OUTX {interface}")
+            self._get_instr().read_termination = "\r" if interface == 0 else "\n"
+            self._get_instr().write(f"OUTX {interface}")
         else:
             raise ValueError(
                 f"Invalid output interface: {interface}. Must be 0 (RS232) or 1 "
@@ -901,7 +901,7 @@ class sr830(_Settings):
                 * 2 : Aux In 4
         """
         if (channel in [1, 2]) and (display in range(5)) and (ratio in range(3)):
-            self._require_instr().write(f"DDEF {channel}, {display}, {ratio}")
+            self._get_instr().write(f"DDEF {channel}, {display}, {ratio}")
         else:
             raise ValueError(
                 f"Invalid channel, display, or ratio: {channel}, {display}, or {ratio}"
@@ -953,7 +953,7 @@ class sr830(_Settings):
                 * 2 : Aux In 4
         """
         if channel in [1, 2]:
-            display, ratio = self._require_instr().query(f"DDEF? {channel}").split(",")
+            display, ratio = self._get_instr().query(f"DDEF? {channel}").split(",")
             return int(display), int(ratio)
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
@@ -981,7 +981,7 @@ class sr830(_Settings):
                 * 1 : Y
         """
         if (channel in [1, 2]) and (output in [0, 1]):
-            self._require_instr().write(f"FPOP {channel}, {output}")
+            self._get_instr().write(f"FPOP {channel}, {output}")
         else:
             raise ValueError(
                 f"Invalid channel or output: {channel} or {output}. Channel must be 0 "
@@ -1013,7 +1013,7 @@ class sr830(_Settings):
                 * 1 : Y
         """
         if channel in [1, 2]:
-            return int(self._require_instr().query(f"FPOP? {channel}"))
+            return int(self._get_instr().query(f"FPOP? {channel}"))
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
@@ -1051,7 +1051,7 @@ class sr830(_Settings):
             and (offset <= 105)
             and (expand in range(3))
         ):
-            self._require_instr().write(f"OEXP {parameter}, {offset}, {expand}")
+            self._get_instr().write(f"OEXP {parameter}, {offset}, {expand}")
         else:
             raise ValueError(
                 f"Invalid parameter, offset, or expand: {parameter}, {offset}, or "
@@ -1084,7 +1084,7 @@ class sr830(_Settings):
                 * 2 : 100
         """
         if parameter in range(3):
-            offset, expand = self._require_instr().query(f"OEXP? {parameter}").split(",")
+            offset, expand = self._get_instr().query(f"OEXP? {parameter}").split(",")
             return float(offset), int(expand)
         else:
             raise ValueError(
@@ -1104,7 +1104,7 @@ class sr830(_Settings):
                 * 3 : R
         """
         if parameter in range(3):
-            self._require_instr().write(f"AOFF {parameter}")
+            self._get_instr().write(f"AOFF {parameter}")
         else:
             raise ValueError(
                 f"Invalid paramter: {parameter}. Must be 1 (X), 2 (Y), or 3 (R)."
@@ -1128,7 +1128,7 @@ class sr830(_Settings):
             Auxiliary input voltage.
         """
         if aux_in in [1, 2, 3, 4]:
-            return float(self._require_instr().query(f"OAUX? {aux_in}"))
+            return float(self._get_instr().query(f"OAUX? {aux_in}"))
         else:
             raise ValueError(
                 f"Invalid auxilliary input: {aux_in}. Must be an integer in range "
@@ -1146,7 +1146,7 @@ class sr830(_Settings):
             Output voltage, -10.500 =< voltage =< 10.500
         """
         if (aux_out in [1, 2, 3, 4]) and (voltage >= -10.5) and (voltage <= 10.5):
-            self._require_instr().write(f"AUXV {aux_out}, {voltage}")
+            self._get_instr().write(f"AUXV {aux_out}, {voltage}")
         else:
             raise ValueError(
                 f"Invalid auxilliary output or voltage: {aux_out} or {voltage}. Aux "
@@ -1168,7 +1168,7 @@ class sr830(_Settings):
             Output voltage, -10.500 =< voltage =< 10.500
         """
         if aux_out in [1, 2, 3, 4]:
-            return float(self._require_instr().query(f"AUXV? {aux_out}"))
+            return float(self._get_instr().query(f"AUXV? {aux_out}"))
         else:
             raise ValueError(
                 f"Invalid auxilliary output: {aux_out}. Must be an integer in range "
@@ -1189,7 +1189,7 @@ class sr830(_Settings):
                 * 0 : Off
                 * 1 : On
         """
-        return int(self._require_instr().query("KCLK?"))
+        return int(self._get_instr().query("KCLK?"))
 
     @key_click_state.setter
     def key_click_state(self, state: int) -> None:
@@ -1204,7 +1204,7 @@ class sr830(_Settings):
                 * 1 : On
         """
         if state in [0, 1]:
-            self._require_instr().write(f"KCLK {state}")
+            self._get_instr().write(f"KCLK {state}")
         else:
             raise ValueError(
                 f"Invalid key click state: {state}. Must be 0 (off) or 1 (on)."
@@ -1224,7 +1224,7 @@ class sr830(_Settings):
                 * 0 : Off
                 * 1 : On
         """
-        return int(self._require_instr().query("ALRM?"))
+        return int(self._get_instr().query("ALRM?"))
 
     @alarm_status.setter
     def alarm_status(self, status: int) -> None:
@@ -1241,7 +1241,7 @@ class sr830(_Settings):
                 * 1 : On
         """
         if status in [0, 1]:
-            self._require_instr().write(f"ALRM {status}")
+            self._get_instr().write(f"ALRM {status}")
         else:
             raise ValueError(
                 f"Invalid alarm status: {status}. Must be 0 (off) or 1 (on)."
@@ -1256,7 +1256,7 @@ class sr830(_Settings):
             Buffer number, 1 =< number =< 9.
         """
         if number in range(1, 10):
-            self._require_instr().write(f"SSET {number}")
+            self._get_instr().write(f"SSET {number}")
         else:
             raise ValueError(
                 f"Invalid save buffer number: {number}. Must be an integer in range "
@@ -1272,7 +1272,7 @@ class sr830(_Settings):
             Buffer number, 1 =< number =< 9.
         """
         if number in range(1, 10):
-            self._require_instr().write(f"RSET {number}")
+            self._get_instr().write(f"RSET {number}")
         else:
             raise ValueError(
                 f"Invalid save buffer number: {number}. Must be an integer in range "
@@ -1286,15 +1286,15 @@ class sr830(_Settings):
 
         Does nothing if the time constant is greater than 1 second.
         """
-        self._require_instr().write("AGAN")
+        self._get_instr().write("AGAN")
 
     def auto_reserve(self) -> None:
         """Automatically set reserve."""
-        self._require_instr().write("ARSV")
+        self._get_instr().write("ARSV")
 
     def auto_phase(self) -> None:
         """Automatically set phase."""
-        self._require_instr().write("APHS")
+        self._get_instr().write("APHS")
 
     # --- Data storage commands ---
 
@@ -1323,7 +1323,7 @@ class sr830(_Settings):
                 * 13 : 512
                 * 14 : Trigger
         """
-        return int(self._require_instr().query("SRAT?"))
+        return int(self._get_instr().query("SRAT?"))
 
     @sample_rate.setter
     def sample_rate(self, rate: int) -> None:
@@ -1351,7 +1351,7 @@ class sr830(_Settings):
                 * 14 : Trigger
         """
         if rate in range(15):
-            self._require_instr().write(f"SRAT {rate}")
+            self._get_instr().write(f"SRAT {rate}")
         else:
             raise ValueError(
                 f"Invalid sample rate: {rate}. Must be an integer in range 0 - 14."
@@ -1369,7 +1369,7 @@ class sr830(_Settings):
                 * 0 : 1 Shot
                 * 1 : Loop
         """
-        return int(self._require_instr().query("SEND?"))
+        return int(self._get_instr().query("SEND?"))
 
     @end_of_buffer_mode.setter
     def end_of_buffer_mode(self, mode: int) -> None:
@@ -1387,7 +1387,7 @@ class sr830(_Settings):
                 * 1 : Loop
         """
         if mode in [0, 1]:
-            self._require_instr().write(f"SEND {mode}")
+            self._get_instr().write(f"SEND {mode}")
         else:
             raise ValueError(
                 f"Invalid end of buffer mode: {mode}. Must be 0 (1 shot) or 1 (loop)."
@@ -1395,7 +1395,7 @@ class sr830(_Settings):
 
     def trigger(self) -> None:
         """Send software trigger."""
-        self._require_instr().write("TRIG")
+        self._get_instr().write("TRIG")
 
     @property
     def trigger_start_mode(self) -> int:
@@ -1409,7 +1409,7 @@ class sr830(_Settings):
                 * 0 : Off
                 * 1 : Start scan
         """
-        return int(self._require_instr().query("TSTR?"))
+        return int(self._get_instr().query("TSTR?"))
 
     @trigger_start_mode.setter
     def trigger_start_mode(self, mode: int) -> None:
@@ -1424,7 +1424,7 @@ class sr830(_Settings):
                 * 1 : Start scan
         """
         if mode in [0, 1]:
-            self._require_instr().write(f"TSTR {mode}")
+            self._get_instr().write(f"TSTR {mode}")
         else:
             raise ValueError(
                 f"Invalid trigger start mode: {mode}. Must be 0 (off) or 1 "
@@ -1441,24 +1441,24 @@ class sr830(_Settings):
         """
         if self.data_transfer_mode == 0:
             # fast data transfer off
-            self._require_instr().write("STRT")
+            self._get_instr().write("STRT")
         else:
             # fast data transfer mode active
-            self._require_instr().write("STRD")
+            self._get_instr().write("STRD")
 
     def pause(self) -> None:
         """Pause data storage.
 
         Ignored if storage is already paused or reset.
         """
-        self._require_instr().write("PAUS")
+        self._get_instr().write("PAUS")
 
     def reset_data_buffers(self) -> None:
         """Reset data buffers.
 
         This command will erase the data buffer.
         """
-        self._require_instr().write("REST")
+        self._get_instr().write("REST")
 
     # --- Data transfer commands ---
 
@@ -1481,7 +1481,7 @@ class sr830(_Settings):
             Value of measured parameter in volts or degrees.
         """
         if parameter in range(1, 5):
-            return float(self._require_instr().query(f"OUTP? {parameter}"))
+            return float(self._get_instr().query(f"OUTP? {parameter}"))
         else:
             raise ValueError(
                 f"Invalid parameter: {parameter}. Must be 1 (X), 2 (Y), 3 (R), or 4 "
@@ -1505,7 +1505,7 @@ class sr830(_Settings):
             Displayed value in display units.
         """
         if channel in [1, 2]:
-            return float(self._require_instr().query(f"OUTR? {channel}"))
+            return float(self._get_instr().query(f"OUTR? {channel}"))
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
@@ -1550,7 +1550,7 @@ class sr830(_Settings):
             len(parameters) in range(2, 7)
         ):
             parameter_text = ",".join([str(i) for i in parameters])
-            values = self._require_instr().query(f"SNAP? {parameter_text}").split(",")
+            values = self._get_instr().query(f"SNAP? {parameter_text}").split(",")
             return (float(i) for i in values)
         else:
             raise ValueError(
@@ -1568,7 +1568,7 @@ class sr830(_Settings):
         N : int
             Number of points in the buffer.
         """
-        return int(self._require_instr().query("SPTS?"))
+        return int(self._get_instr().query("SPTS?"))
 
     def get_ascii_buffer_data(
         self,
@@ -1613,7 +1613,7 @@ class sr830(_Settings):
                 self.pause()
 
             buffer = list(
-                self._require_instr().query_ascii_values(
+                self._get_instr().query_ascii_values(
                     f"TRCA? {channel},{start_bin},{bins}",
                     converter=lambda x: x,
                     container=list,
@@ -1792,7 +1792,7 @@ class sr830(_Settings):
                 * 1 : On (DOS)
                 * 2 : On (Windows)
         """
-        return int(self._require_instr().query("FAST?"))
+        return int(self._get_instr().query("FAST?"))
 
     @data_transfer_mode.setter
     def data_transfer_mode(self, mode: int) -> None:
@@ -1810,7 +1810,7 @@ class sr830(_Settings):
                 * 2 : On (Windows)
         """
         if mode in range(3):
-            self._require_instr().write(f"FAST {mode}")
+            self._get_instr().write(f"FAST {mode}")
         else:
             raise ValueError(
                 f"Invalid data transfer mode: {mode}. Must be 0 (off), 1 (on [DOS]), "
@@ -1821,7 +1821,7 @@ class sr830(_Settings):
 
     def reset(self) -> None:
         """Reset the instrument to the default configuration."""
-        self._require_instr().write("*RST")
+        self._get_instr().write("*RST")
 
     @property
     def idn(self) -> str:
@@ -1837,7 +1837,7 @@ class sr830(_Settings):
             List of identification strings consisting of manufacturer, model, serial
             number, and firmware version number in order.
         """
-        return self._require_instr().query(f"*IDN?")
+        return self._get_instr().query(f"*IDN?")
 
     @property
     def local_mode(self) -> int:
@@ -1852,7 +1852,7 @@ class sr830(_Settings):
                 * 1 : REMOTE
                 * 2 : LOCAL LOCKOUT
         """
-        return int(self._require_instr().query("LOCL?"))
+        return int(self._get_instr().query("LOCL?"))
 
     @local_mode.setter
     def local_mode(self, mode: int) -> None:
@@ -1868,7 +1868,7 @@ class sr830(_Settings):
                 * 2 : LOCAL LOCKOUT
         """
         if mode in range(3):
-            self._require_instr().write(f"LOCL {mode}")
+            self._get_instr().write(f"LOCL {mode}")
         else:
             raise ValueError(
                 f"Invalid local mode: {mode}. Must be 0 (local), 1 (remote), or 2 "
@@ -1890,7 +1890,7 @@ class sr830(_Settings):
                 * 0 : No
                 * 1 : Yes
         """
-        return int(self._require_instr().query("OVRM?"))
+        return int(self._get_instr().query("OVRM?"))
 
     @gpib_override_remote.setter
     def gpib_override_remote(self, condition: int) -> None:
@@ -1908,7 +1908,7 @@ class sr830(_Settings):
                 * 1 : Yes
         """
         if condition in [0, 1]:
-            self._require_instr().write(f"OVRM {condition}")
+            self._get_instr().write(f"OVRM {condition}")
         else:
             raise ValueError(
                 f"Invalid GPIB override remote condition: {condition}. Must be 0 (no) "
@@ -1919,7 +1919,7 @@ class sr830(_Settings):
 
     def clear_status_registers(self) -> None:
         """Clear all status registers."""
-        self._require_instr().write("*CLS")
+        self._get_instr().write("*CLS")
 
     def set_enable_register(
         self,
@@ -1959,7 +1959,7 @@ class sr830(_Settings):
                         f"Invalud bit or value: {bit} or {value}. Bit must in range"
                         + " 0 - 7 and value must be 0 or 1 if value is not decimal."
                     )
-            self._require_instr().write(cmd)
+            self._get_instr().write(cmd)
         else:
             raise ValueError(
                 f"Invalid register: {register}. Must be one of "
@@ -1991,7 +1991,7 @@ class sr830(_Settings):
                     raise ValueError(
                         f"{bit} is out of range. Bit must be in range 0-7 if specified."
                     )
-            return int(self._require_instr().query(cmd))
+            return int(self._get_instr().query(cmd))
         else:
             raise ValueError(
                 f"Invalid register: {register}. Must be one of "
@@ -2025,7 +2025,7 @@ class sr830(_Settings):
                     raise ValueError(
                         f"{bit} is out of range. Bit must be in range 0-7 if specified."
                     )
-            return int(self._require_instr().query(cmd))
+            return int(self._get_instr().query(cmd))
         else:
             raise ValueError(
                 f"Invalid status byte: {status_byte}. Must be one of "
@@ -2041,7 +2041,7 @@ class sr830(_Settings):
         value : int
             Power-on status clear bit value.
         """
-        return int(self._require_instr().query("*PSC?"))
+        return int(self._get_instr().query("*PSC?"))
 
     @power_on_status_clear_bit.setter
     def power_on_status_clear_bit(self, value: int) -> None:
@@ -2056,7 +2056,7 @@ class sr830(_Settings):
                 * 1 : Set, all status and enable registers are cleared on power up.
         """
         if value in [0, 1]:
-            self._require_instr().write(f"*PSC {value}")
+            self._get_instr().write(f"*PSC {value}")
         else:
             raise ValueError(
                 f"Invalid power on status clear bit: {value}. Must be 0 (cleared) or 1"

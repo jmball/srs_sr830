@@ -76,7 +76,7 @@ def test_connect():
         args.resource_name,
         output_interface=args.output_interface,
     )
-    assert lia.instr.session is not None
+    assert lia._instr.session is not None
 
 
 def test_reset():
@@ -737,8 +737,8 @@ def test_power_on_status_clear_bit():
 
 def test_disconnect():
     """Test for successful disconnection."""
-    resource = lia.instr
+    resource = lia._instr
     lia.disconnect()
-    assert lia.instr is None
+    assert lia._instr is None
     with pytest.raises(visa.InvalidSession):
         resource.session

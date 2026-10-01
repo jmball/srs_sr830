@@ -44,8 +44,9 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
   current inputs; time constants are in seconds, and sample rates are in Hz.
 - Follow the existing four-space indentation, snake_case methods and properties,
   and NumPy-style docstrings describing parameters, ranges, and units.
-- Hardware getters query `self.instr`; setters validate values before writing
-  instrument commands. Preserve command spelling, channel numbering, and
+- The hardware VISA resource is private (`self._instr`). Driver I/O uses
+  `_get_instr()` to obtain it or raise RuntimeError when disconnected. Getters
+  query the resource; setters validate values before writing instrument commands. Preserve command spelling, channel numbering, and
   interface-specific binary transfer behavior.
 - The SR830 programming manual is linked in both implementation module
   docstrings. Consult it when changing protocol behavior.
@@ -93,7 +94,7 @@ for ambiguous adapters. Local mode and lockout are explicit caller settings via
 `local_mode`; `connect()` rejects the removed `local_lockout` option and sends
 no `LOCL` command. Connection options are keyword-only,
 conflicting framing is rejected, and connecting twice raises. Disconnect clears
-`instr`, is idempotent, and closes only the resource; managers remain open
+`_instr`, is idempotent, and closes only the resource; managers remain open
 because PyVISA shares them. Disconnect after hardware work; the hardware
 driver's context manager calls `disconnect()` on exit.
 
