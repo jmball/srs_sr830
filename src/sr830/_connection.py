@@ -4,13 +4,14 @@ from typing import Any
 
 from pyvisa.constants import InterfaceType
 
-from .settings import OutputInterface
+from .settings import OutputInterface, _validate_enum
 
 
 def resolve_output_interface(
-    interface_type: InterfaceType, output_interface: int | None
+    interface_type: InterfaceType, output_interface: OutputInterface | int | None
 ) -> int:
     """Infer direct VISA interfaces, requiring an override for adapters."""
+    _validate_enum(output_interface, OutputInterface)
     if output_interface is not None:
         if output_interface not in (OutputInterface.RS232, OutputInterface.GPIB):
             raise ValueError("output_interface must be 0 (RS232) or 1 (GPIB).")

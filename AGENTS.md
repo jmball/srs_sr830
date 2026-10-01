@@ -23,6 +23,8 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
 - `tests/test_connection.py`: hardware-free lifecycle and annotation checks,
   run with `python -m unittest discover -s tests`.
 - `tests/test_settings.py`: shared-table, enum, and integer compatibility checks.
+- `tests/test_enums.py`: exhaustive named-code, selector, annotation, and status
+  bit/mask compatibility checks.
 - `tests/test_logging.py`: logging/warning policy and status-decoding checks.
 - `pyproject.toml`: package metadata, package discovery, runtime dependencies
   (`pyvisa` and `pyvisa-py`), and the setuptools build backend. Keep installation
@@ -41,8 +43,14 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
   validation consistent with the intended hardware interface.
 - Define setting tables and enum codes only in `src/sr830/settings.py`; both
   packages export the same enums. Existing integer calls and getter return types
-  remain supported. Sensitivities are in V for voltage inputs and microamps for
-  current inputs; time constants are in seconds, and sample rates are in Hz.
+  remain supported. Enum inputs must match the setting and, for display/ratio
+  enums, the channel. Register bit-position enums and IntFlag masks must match
+  their register and must not be interchanged. Explicitly serialize command codes
+  as integers, including SNAP lists, for Python 3.10 compatibility. Sensitivity
+  names use SI prefix and number (u_1, m_200); _1 is a public unity member.
+  Sensitivities are RMS full-scale values in V for voltage inputs and microamps
+  for current inputs; time constants are in seconds, and sample rates are in Hz.
+  OutputExpansion.x_1 has code 0 (the legacy expands tuple still contains 0).
 - Follow the existing four-space indentation, snake_case methods and properties,
   and NumPy-style docstrings describing parameters, ranges, and units.
 - The hardware VISA resource is private (`self._instr`). Driver I/O uses

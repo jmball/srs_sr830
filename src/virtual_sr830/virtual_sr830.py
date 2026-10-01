@@ -12,7 +12,50 @@ from typing import Any
 import pyvisa
 from pyvisa.constants import InterfaceType
 from sr830._connection import connection_kwargs, resolve_output_interface
-from sr830.settings import _Settings
+from sr830.settings import (
+    AuxiliaryChannel,
+    Channel,
+    Channel1Display,
+    Channel1Ratio,
+    Channel2Display,
+    Channel2Ratio,
+    DataTransferMode,
+    EndOfBufferMode,
+    ErrorBit,
+    ErrorFlag,
+    FrontPanelOutputSource,
+    GpibOverrideRemote,
+    InputConfiguration,
+    InputCoupling,
+    InputShieldGrounding,
+    LiaStatusBit,
+    LiaStatusFlag,
+    LineNotchFilter,
+    LocalMode,
+    LowPassFilterSlope,
+    MeasurementParameter,
+    OutputExpansion,
+    OutputInterface,
+    OutputParameter,
+    ReferenceSource,
+    ReferenceTrigger,
+    ReserveMode,
+    SampleRate,
+    Sensitivity,
+    SerialPollBit,
+    SerialPollFlag,
+    StandardEventBit,
+    StandardEventFlag,
+    StatusRegister,
+    SwitchState,
+    SynchronousFilter,
+    TimeConstant,
+    TriggerStartMode,
+    _Settings,
+    _validate_enum,
+    _validate_register_bit,
+    _validate_register_value,
+)
 
 import warnings
 
@@ -90,7 +133,7 @@ class sr830(_Settings):
         resource_name: str,
         *,
         resource_manager: pyvisa.ResourceManager | None = None,
-        output_interface: int | None = None,
+        output_interface: OutputInterface | int | None = None,
         **resource_kwargs: Any,
     ) -> None:
         """Select the virtual response interface without opening a VISA resource.
@@ -167,6 +210,8 @@ class sr830(_Settings):
     def reference_source(self) -> int:
         """Get the reference source.
 
+        Returns an integer code; use ReferenceSource(code) for its named setting.
+
         Returns
         -------
         source : {0, 1}
@@ -178,17 +223,18 @@ class sr830(_Settings):
         return self._reference_source
 
     @reference_source.setter
-    def reference_source(self, source: int) -> None:
+    def reference_source(self, source: ReferenceSource | int) -> None:
         """Set the reference source.
 
         Parameters
         ----------
-        source : {0, 1}
+        source : ReferenceSource or int
             Refernce source:
 
                 * 0 : external
                 * 1 : internal
         """
+        _validate_enum(source, ReferenceSource)
         if source in [0, 1]:
             self._reference_source = int(source)
         else:
@@ -229,6 +275,8 @@ class sr830(_Settings):
     def reference_trigger(self) -> int:
         """Get the reference trigger type when using external ref.
 
+        Returns an integer code; use ReferenceTrigger(code) for its named setting.
+
         Returns
         -------
         trigger : {0, 1, 2}
@@ -241,18 +289,19 @@ class sr830(_Settings):
         return self._reference_trigger
 
     @reference_trigger.setter
-    def reference_trigger(self, trigger: int) -> None:
+    def reference_trigger(self, trigger: ReferenceTrigger | int) -> None:
         """Set the reference trigger type when using external ref.
 
         Parameters
         ----------
-        trigger : {0, 1, 2}
+        trigger : ReferenceTrigger or int
             Trigger type:
 
                 * 0: zero crossing
                 * 1: TTL rising egde
                 * 2: TTL falling edge
         """
+        _validate_enum(trigger, ReferenceTrigger)
         if trigger in [0, 1, 2]:
             self._reference_trigger = int(trigger)
         else:
@@ -320,6 +369,8 @@ class sr830(_Settings):
     def input_configuration(self) -> int:
         """Set the input configuration.
 
+        Returns an integer code; use InputConfiguration(code) for its named setting.
+
         Returns
         -------
         config : {0, 1, 2, 3}
@@ -333,12 +384,12 @@ class sr830(_Settings):
         return self._input_configuration
 
     @input_configuration.setter
-    def input_configuration(self, config: int) -> None:
+    def input_configuration(self, config: InputConfiguration | int) -> None:
         """Set the input configuration.
 
         Parameters
         ----------
-        config : {0, 1, 2, 3}
+        config : InputConfiguration or int
             Input configuration:
 
                 * 0 : A
@@ -346,6 +397,7 @@ class sr830(_Settings):
                 * 2 : I (1 MOhm)
                 * 3 : I (100 MOhm)
         """
+        _validate_enum(config, InputConfiguration)
         if config in range(4):
             self._input_configuration = int(config)
         else:
@@ -358,6 +410,8 @@ class sr830(_Settings):
     def input_shield_grounding(self) -> int:
         """Get input shield grounding.
 
+        Returns an integer code; use InputShieldGrounding(code) for its named setting.
+
         Returns
         -------
         grounding : {0, 1}
@@ -369,17 +423,18 @@ class sr830(_Settings):
         return self._input_shield_grounding
 
     @input_shield_grounding.setter
-    def input_shield_grounding(self, grounding: int) -> None:
+    def input_shield_grounding(self, grounding: InputShieldGrounding | int) -> None:
         """Set input shield grounding.
 
         Parameters
         ----------
-        grounding : {0, 1}
+        grounding : InputShieldGrounding or int
             Input shield grounding:
 
                 * 0 : Float
                 * 1 : Ground
         """
+        _validate_enum(grounding, InputShieldGrounding)
         if grounding in [0, 1]:
             self._input_shield_grounding = int(grounding)
         else:
@@ -392,6 +447,8 @@ class sr830(_Settings):
     def input_coupling(self) -> int:
         """Get input coupling.
 
+        Returns an integer code; use InputCoupling(code) for its named setting.
+
         Returns
         -------
         coupling : {0, 1}
@@ -403,17 +460,18 @@ class sr830(_Settings):
         return self._input_coupling
 
     @input_coupling.setter
-    def input_coupling(self, coupling: int) -> None:
+    def input_coupling(self, coupling: InputCoupling | int) -> None:
         """Set input coupling.
 
         Parameters
         ----------
-        coupling : {0, 1}
+        coupling : InputCoupling or int
             Input coupling:
 
                 * 0 : AC
                 * 1 : DC
         """
+        _validate_enum(coupling, InputCoupling)
         if coupling in [0, 1]:
             self._input_coupling = int(coupling)
         else:
@@ -424,6 +482,8 @@ class sr830(_Settings):
     @property
     def line_notch_filter_status(self) -> int:
         """Get input line notch filter status.
+
+        Returns an integer code; use LineNotchFilter(code) for its named setting.
 
         Returns
         -------
@@ -438,12 +498,12 @@ class sr830(_Settings):
         return self._line_notch_filter_status
 
     @line_notch_filter_status.setter
-    def line_notch_filter_status(self, status: int) -> None:
+    def line_notch_filter_status(self, status: LineNotchFilter | int) -> None:
         """Set input line notch filter status.
 
         Parameters
         ----------
-        status : {0, 1, 2, 3}
+        status : LineNotchFilter or int
             Input line notch filter status:
 
                 * 0 : no filters
@@ -451,6 +511,7 @@ class sr830(_Settings):
                 * 2 : 2 x Line notch in
                 * 3 : Both notch filters in
         """
+        _validate_enum(status, LineNotchFilter)
         if status in range(4):
             self._line_notch_filter_status = int(status)
         else:
@@ -466,10 +527,13 @@ class sr830(_Settings):
     def sensitivity(self) -> int:
         """Get sensitivity.
 
+        Returns an integer code; use Sensitivity(code) for its named setting.
+
         Returns
         -------
         sensitivity : {0 - 26}
-            Sensitivity in V/uA:
+            RMS full-scale amplitude, in V for voltage inputs or microamps
+            for current inputs (not gain):
 
                 * 0 : 2e-9
                 * 1 : 5e-9
@@ -502,13 +566,15 @@ class sr830(_Settings):
         return self._sensitivity
 
     @sensitivity.setter
-    def sensitivity(self, sensitivity: int) -> None:
+    def sensitivity(self, sensitivity: Sensitivity | int) -> None:
         """Set sensitivity.
 
         Parameters
         ----------
-        sensitivity : {0 - 26}
-            Sensitivity in V/uA:
+        sensitivity : Sensitivity or int
+            RMS full-scale amplitude (not gain), in V for voltage inputs or
+            microamps for current inputs. Sensitivity names use <prefix>_<number>,
+            with u for micro and _1 for unity:
 
                 * 0 : 2e-9
                 * 1 : 5e-9
@@ -538,8 +604,9 @@ class sr830(_Settings):
                 * 25 : 500e-3
                 * 26 : 1
         """
+        _validate_enum(sensitivity, Sensitivity)
         if sensitivity in range(27):
-            self._sensitivity = sensitivity
+            self._sensitivity = int(sensitivity)
         else:
             raise ValueError(
                 f"Invalid sensitivity: {sensitivity}. Must be an integer in range 0 - "
@@ -549,6 +616,8 @@ class sr830(_Settings):
     @property
     def reserve_mode(self) -> int:
         """Get reserve mode.
+
+        Returns an integer code; use ReserveMode(code) for its named setting.
 
         Returns
         -------
@@ -562,18 +631,19 @@ class sr830(_Settings):
         return self._reserve_mode
 
     @reserve_mode.setter
-    def reserve_mode(self, mode: int) -> None:
+    def reserve_mode(self, mode: ReserveMode | int) -> None:
         """Set reserve mode.
 
         Parameters
         ----------
-        mode : {0, 1, 2}
+        mode : ReserveMode or int
             Reserve mode:
 
                 * 0 : High reserve
                 * 1 : Normal
                 * 2 : Low noise
         """
+        _validate_enum(mode, ReserveMode)
         if mode in range(3):
             self._reserve_mode = int(mode)
         else:
@@ -585,6 +655,8 @@ class sr830(_Settings):
     @property
     def time_constant(self) -> int:
         """Get time constant.
+
+        Returns an integer code; use TimeConstant(code) for its named setting.
 
         Returns
         -------
@@ -615,12 +687,12 @@ class sr830(_Settings):
         return self._time_constant
 
     @time_constant.setter
-    def time_constant(self, tc: int) -> None:
+    def time_constant(self, tc: TimeConstant | int) -> None:
         """Set time constant.
 
         Parameters
         ----------
-        tc : {0 - 19}
+        tc : TimeConstant or int
             Time constant in s:
 
                 * 0 : 10e-6
@@ -644,8 +716,9 @@ class sr830(_Settings):
                 * 18 : 10e3
                 * 19 : 30e3
         """
+        _validate_enum(tc, TimeConstant)
         if tc in range(20):
-            self._time_constant = tc
+            self._time_constant = int(tc)
         else:
             raise ValueError(
                 f"Invalid time constant: {tc}. Must be an integer in range 0 - 19."
@@ -655,8 +728,10 @@ class sr830(_Settings):
     def lowpass_filter_slope(self) -> int:
         """Get the low pass filter slope.
 
-        Parameters
-        ----------
+        Returns an integer code; use LowPassFilterSlope(code) for its named setting.
+
+        Returns
+        -------
         slope : {0, 1, 2, 3}
             Low pass filter slope in dB/oct:
 
@@ -668,12 +743,12 @@ class sr830(_Settings):
         return self._lowpass_filter_slope
 
     @lowpass_filter_slope.setter
-    def lowpass_filter_slope(self, slope: int) -> None:
+    def lowpass_filter_slope(self, slope: LowPassFilterSlope | int) -> None:
         """Set the low pass filter slope.
 
         Parameters
         ----------
-        slope : {0, 1, 2, 3}
+        slope : LowPassFilterSlope or int
             Low pass filter slope in dB/oct:
 
                 * 0 : 6
@@ -681,8 +756,9 @@ class sr830(_Settings):
                 * 2 : 18
                 * 3 : 24
         """
+        _validate_enum(slope, LowPassFilterSlope)
         if slope in range(4):
-            self._lowpass_filter_slope = slope
+            self._lowpass_filter_slope = int(slope)
         else:
             raise ValueError(
                 f"Invalid low-pass filter slope: {slope}. Must be 0 (6 dB/oct), 1 "
@@ -692,6 +768,8 @@ class sr830(_Settings):
     @property
     def sync_filter_status(self) -> int:
         """Get synchronous filter status.
+
+        Returns an integer code; use SynchronousFilter(code) for its named setting.
 
         Returns
         -------
@@ -704,17 +782,18 @@ class sr830(_Settings):
         return self._sync_filter_status
 
     @sync_filter_status.setter
-    def sync_filter_status(self, status: int) -> None:
+    def sync_filter_status(self, status: SynchronousFilter | int) -> None:
         """Set synchronous filter status.
 
         Parameters
         ----------
-        status : {0, 1}
+        status : SynchronousFilter or int
             Synchronous filter status:
 
                 * 0 : Off
                 * 1 : below 200 Hz
         """
+        _validate_enum(status, SynchronousFilter)
         if status in [0, 1]:
             self._sync_filter_status = int(status)
         else:
@@ -729,6 +808,8 @@ class sr830(_Settings):
     def output_interface(self) -> int:
         """Get the output communication interface.
 
+        Returns an integer code; use OutputInterface(code) for its named setting.
+
         Returns
         -------
         interface : {0, 1}
@@ -740,7 +821,7 @@ class sr830(_Settings):
         return self._output_interface
 
     @output_interface.setter
-    def output_interface(self, interface: int) -> None:
+    def output_interface(self, interface: OutputInterface | int) -> None:
         """Set the output communication interface.
 
         This command should be sent before any query commands to direct the
@@ -748,12 +829,13 @@ class sr830(_Settings):
 
         Parameters
         ----------
-        interface : {0, 1}
+        interface : OutputInterface or int
             Output communication interface:
 
                 * 0 : RS232
                 * 1 : GPIB
         """
+        _validate_enum(interface, OutputInterface)
         if interface in [0, 1]:
             self._output_interface = int(interface)
         else:
@@ -762,18 +844,23 @@ class sr830(_Settings):
                 + "(GPIB)."
             )
 
-    def set_display(self, channel: int, display: int = 1, ratio: int = 0) -> None:
+    def set_display(
+        self,
+        channel: Channel | int,
+        display: Channel1Display | Channel2Display | int = 1,
+        ratio: Channel1Ratio | Channel2Ratio | int = 0,
+    ) -> None:
         """Set a channel display configuration.
 
         Parameters
         ----------
-        channel : {1, 2}
+        channel : Channel or int
             Channel:
 
                 * 1 : CH1
                 * 2 : CH2
 
-        display : {0, 1, 2, 3, 4}
+        display : Channel1Display | Channel2Display or int
             Display parameter for CH1:
 
                 * 0 : X
@@ -790,7 +877,8 @@ class sr830(_Settings):
                 * 3 : Aux In 3
                 * 4 : Aux In 4
 
-        ratio : {0, 1, 2}
+        ratio : Channel1Ratio | Channel2Ratio or int
+            Channel1Ratio for CH1 and Channel2Ratio for CH2.
             Ratio type for CH1:
 
                 * 0 : none
@@ -803,6 +891,9 @@ class sr830(_Settings):
                 * 1 : Aux In 3
                 * 2 : Aux In 4
         """
+        _validate_enum(channel, Channel)
+        _validate_enum(display, Channel1Display if channel == 1 else Channel2Display)
+        _validate_enum(ratio, Channel1Ratio if channel == 1 else Channel2Ratio)
         if (channel in [1, 2]) and (display in range(5)) and (ratio in range(3)):
             if channel == 1:
                 self._ch1_display = int(display)
@@ -817,12 +908,12 @@ class sr830(_Settings):
                 + " range 0 - 4; and ratio must be an integer in the range 0 - 2."
             )
 
-    def get_display(self, channel: int) -> tuple[int, int]:
+    def get_display(self, channel: Channel | int) -> tuple[int, int]:
         """Get a channel display configuration.
 
         Parameters
         ----------
-        channel : {1, 2}
+        channel : Channel or int
             Channel:
 
                 * 1 : CH1
@@ -848,6 +939,7 @@ class sr830(_Settings):
                 * 4 : Aux In 4
 
         ratio : {0, 1, 2}
+            Channel1Ratio for CH1 and Channel2Ratio for CH2.
             Ratio type for CH1:
 
                 * 0 : none
@@ -860,6 +952,7 @@ class sr830(_Settings):
                 * 1 : Aux In 2
                 * 2 : Aux In 4
         """
+        _validate_enum(channel, Channel)
         if channel == 1:
             return self._ch1_display, self._ch1_ratio
         elif channel == 2:
@@ -867,18 +960,22 @@ class sr830(_Settings):
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
-    def set_front_output(self, channel: int, output: int = 0) -> None:
+    def set_front_output(
+        self,
+        channel: Channel | int,
+        output: FrontPanelOutputSource | int = 0,
+    ) -> None:
         """Set front panel output sources.
 
         Parameters
         ----------
-        channel : {1, 2}
+        channel : Channel or int
             Channel:
 
                 * 1 : CH1
                 * 2 : CH2
 
-        output : {0, 1}
+        output : FrontPanelOutputSource or int
             Output quantity for CH1:
 
                 * 0 : CH1 display
@@ -889,6 +986,8 @@ class sr830(_Settings):
                 * 0 : CH2 display
                 * 1 : Y
         """
+        _validate_enum(channel, Channel)
+        _validate_enum(output, FrontPanelOutputSource)
         if (channel in [1, 2]) and (output in [0, 1]):
             if channel == 1:
                 self._ch1_output = int(output)
@@ -900,12 +999,12 @@ class sr830(_Settings):
                 + "(Ch1) or 1 (Ch2); and output must be 0 or 1."
             )
 
-    def get_front_output(self, channel: int) -> int:
+    def get_front_output(self, channel: Channel | int) -> int:
         """Get front panel output sources.
 
         Parameters
         ----------
-        channel : {1, 2}
+        channel : Channel or int
             Channel:
 
                 * 1 : CH1
@@ -924,6 +1023,7 @@ class sr830(_Settings):
                 * 0 : CH2 display
                 * 1 : Y
         """
+        _validate_enum(channel, Channel)
         if channel == 1:
             return self._ch1_output
         elif channel == 2:
@@ -933,9 +1033,9 @@ class sr830(_Settings):
 
     def set_output_offset_expand(
         self,
-        parameter: int,
+        parameter: OutputParameter | int,
         offset: float,
-        expand: int,
+        expand: OutputExpansion | int,
     ) -> None:
         """Set the output offsets and expands.
 
@@ -943,7 +1043,7 @@ class sr830(_Settings):
 
         Parameters
         ----------
-        parameter : {1, 2, 3}
+        parameter : OutputParameter or int
             Measurement parameter:
 
                 * 1 : X
@@ -952,13 +1052,15 @@ class sr830(_Settings):
 
         offset : float
             Offset in %, -105.00 =< offset =< 105.00.
-        expand : {0, 1, 2}
-            Expand:
+        expand : OutputExpansion or int
+            Expansion factor; OutputExpansion.x_1 has code 0:
 
-                * 0 : 0
+                * 0 : 1 (no expansion)
                 * 1 : 10
                 * 2 : 100
         """
+        _validate_enum(parameter, OutputParameter)
+        _validate_enum(expand, OutputExpansion)
         if (
             (parameter in [1, 2, 3])
             and (offset >= -105)
@@ -967,27 +1069,27 @@ class sr830(_Settings):
         ):
             if parameter == 1:
                 self._X_offset = offset
-                self._X_expand = expand
+                self._X_expand = int(expand)
             elif parameter == 2:
                 self._Y_offset = offset
-                self._Y_expand = expand
+                self._Y_expand = int(expand)
             elif parameter == 3:
                 self._R_offset = offset
-                self._R_expand = expand
+                self._R_expand = int(expand)
         else:
             raise ValueError(
                 f"Invalid parameter, offset, or expand: {parameter}, {offset}, or "
                 + f"{expand}. Parameter must be 1 (X), 2 (Y), or 3 (R); offset must "
-                + "be in the range -105 - 105 percent; and expand must be 0 (0), 1 "
+                + "be in the range -105 - 105 percent; and expand must be 0 (1), 1 "
                 + "(10), or 2 (100)."
             )
 
-    def get_output_offset_expand(self, parameter: int) -> tuple[float, int]:
+    def get_output_offset_expand(self, parameter: OutputParameter | int) -> tuple[float, int]:
         """Get the output offsets and expands.
 
         Parameters
         ----------
-        parameter : {1, 2, 3}
+        parameter : OutputParameter or int
             Measurement parameter:
 
                 * 1 : X
@@ -999,12 +1101,13 @@ class sr830(_Settings):
         offset : float
             Offset in %, -105.00 =< offset =< 105.00.
         expand : {0, 1, 2}
-            Expand:
+            Expansion factor; OutputExpansion.x_1 has code 0:
 
-                * 0 : 0
+                * 0 : 1 (no expansion)
                 * 1 : 10
                 * 2 : 100
         """
+        _validate_enum(parameter, OutputParameter)
         if parameter == 1:
             return self._X_offset, self._X_expand
         elif parameter == 2:
@@ -1016,18 +1119,19 @@ class sr830(_Settings):
                 f"Invalid paramter: {parameter}. Must be 1 (X), 2 (Y), or 3 (R)."
             )
 
-    def auto_offset(self, parameter: int) -> None:
+    def auto_offset(self, parameter: OutputParameter | int) -> None:
         """Set parameter offset to zero.
 
-        Paramaters
+        Parameters
         ----------
-        parameter : {1, 2, 3}
+        parameter : OutputParameter or int
             Measurement parameter:
 
                 * 1 : X
                 * 2 : Y
                 * 3 : R
         """
+        _validate_enum(parameter, OutputParameter)
         if parameter == 1:
             self._X_offset = 0
         elif parameter == 2:
@@ -1041,14 +1145,14 @@ class sr830(_Settings):
 
     # --- Aux input and output commands ---
 
-    def get_aux_in(self, aux_in: int) -> float:
+    def get_aux_in(self, aux_in: AuxiliaryChannel | int) -> float:
         """Get voltage of auxiliary input.
 
         The resolution is 1/3 mV.
 
         Parameter
         ---------
-        aux_in : {1, 2, 3, 4}
+        aux_in : AuxiliaryChannel or int
             Auxiliary input (1, 2, 3, or 4).
 
         Returns
@@ -1056,6 +1160,7 @@ class sr830(_Settings):
         voltage : float
             Auxiliary input voltage.
         """
+        _validate_enum(aux_in, AuxiliaryChannel)
         if aux_in in [1, 2, 3, 4]:
             return 1
         else:
@@ -1064,16 +1169,17 @@ class sr830(_Settings):
                 + "1 - 4."
             )
 
-    def set_aux_out(self, aux_out: int, voltage: float) -> None:
+    def set_aux_out(self, aux_out: AuxiliaryChannel | int, voltage: float) -> None:
         """Set voltage of auxiliary output.
 
         Parameters
         ----------
-        aux_out : {1, 2, 3, 4}
+        aux_out : AuxiliaryChannel or int
             Auxiliary output (1, 2, 3, or 4).
         voltage : float
             Output voltage, -10.500 =< voltage =< 10.500
         """
+        _validate_enum(aux_out, AuxiliaryChannel)
         if (aux_out in [1, 2, 3, 4]) and (voltage >= -10.5) and (voltage <= 10.5):
             if aux_out == 1:
                 self._aux_out_1 = voltage
@@ -1090,12 +1196,12 @@ class sr830(_Settings):
                 + "range -10.5 - 10.5 volts."
             )
 
-    def get_aux_out(self, aux_out: int) -> float:
+    def get_aux_out(self, aux_out: AuxiliaryChannel | int) -> float:
         """Get voltage of auxiliary output.
 
         Parameters
         ----------
-        aux_out : {1, 2, 3, 4}
+        aux_out : AuxiliaryChannel or int
             Auxiliary output (1, 2, 3, or 4).
 
         Returns
@@ -1103,6 +1209,7 @@ class sr830(_Settings):
         voltage : float
             Output voltage, -10.500 =< voltage =< 10.500
         """
+        _validate_enum(aux_out, AuxiliaryChannel)
         if aux_out == 1:
             return self._aux_out_1
         elif aux_out == 2:
@@ -1123,6 +1230,8 @@ class sr830(_Settings):
     def key_click_state(self) -> int:
         """Get key click state.
 
+        Returns an integer code; use SwitchState(code) for its named setting.
+
         Returns
         -------
         state : {0, 1}
@@ -1134,17 +1243,18 @@ class sr830(_Settings):
         return self._key_click_state
 
     @key_click_state.setter
-    def key_click_state(self, state: int) -> None:
+    def key_click_state(self, state: SwitchState | int) -> None:
         """Set key click state.
 
         Parameters
         ----------
-        state : {0, 1}
+        state : SwitchState or int
             Key click state:
 
                 * 0 : Off
                 * 1 : On
         """
+        _validate_enum(state, SwitchState)
         if state in [0, 1]:
             self._key_click_state = int(state)
         else:
@@ -1155,6 +1265,8 @@ class sr830(_Settings):
     @property
     def alarm_status(self) -> int:
         """Get the alarm status.
+
+        Returns an integer code; use SwitchState(code) for its named setting.
 
         The 'alarm' refers to all sounds emitted by the instrument.
 
@@ -1169,19 +1281,20 @@ class sr830(_Settings):
         return self._alarm_status
 
     @alarm_status.setter
-    def alarm_status(self, status: int) -> None:
+    def alarm_status(self, status: SwitchState | int) -> None:
         """Set the alarm status.
 
         The 'alarm' refers to all sounds emitted by the instrument.
 
         Parameters
         ----------
-        status : {0, 1}
+        status : SwitchState or int
             Alarm status:
 
                 * 0 : Off
                 * 1 : On
         """
+        _validate_enum(status, SwitchState)
         if status in [0, 1]:
             self._alarm_status = int(status)
         else:
@@ -1244,6 +1357,8 @@ class sr830(_Settings):
     def sample_rate(self) -> int:
         """Get the data sample rate.
 
+        Returns an integer code; use SampleRate(code) for its named setting.
+
         Returns
         ---------
         rate : {0 - 14} or float or int or "Trigger"
@@ -1268,12 +1383,12 @@ class sr830(_Settings):
         return self._sample_rate
 
     @sample_rate.setter
-    def sample_rate(self, rate: int) -> None:
+    def sample_rate(self, rate: SampleRate | int) -> None:
         """Set the data sample rate.
 
         Paramters
         ---------
-        rate : {0 - 14}
+        rate : SampleRate or int
             Sample rate in Hz:
 
                 * 0 : 62.5e-3
@@ -1292,8 +1407,9 @@ class sr830(_Settings):
                 * 13 : 512
                 * 14 : Trigger
         """
+        _validate_enum(rate, SampleRate)
         if rate in range(15):
-            self._sample_rate = rate
+            self._sample_rate = int(rate)
         else:
             raise ValueError(
                 f"Invalid sample rate: {rate}. Must be an integer in range 0 - 14."
@@ -1302,6 +1418,8 @@ class sr830(_Settings):
     @property
     def end_of_buffer_mode(self) -> int:
         """Get the end of buffer mode.
+
+        Returns an integer code; use EndOfBufferMode(code) for its named setting.
 
         Returns
         ----------
@@ -1314,7 +1432,7 @@ class sr830(_Settings):
         return self._end_of_buffer_mode
 
     @end_of_buffer_mode.setter
-    def end_of_buffer_mode(self, mode: int) -> None:
+    def end_of_buffer_mode(self, mode: EndOfBufferMode | int) -> None:
         """Set the end of buffer mode.
 
         If Loop mode is used, make sure to pause data storage before reading the
@@ -1322,12 +1440,13 @@ class sr830(_Settings):
 
         Parameters
         ----------
-        mode : {0, 1}
+        mode : EndOfBufferMode or int
             End of buffer mode:
 
                 * 0 : 1 Shot
                 * 1 : Loop
         """
+        _validate_enum(mode, EndOfBufferMode)
         if mode in [0, 1]:
             self._end_of_buffer_mode = int(mode)
         else:
@@ -1343,6 +1462,8 @@ class sr830(_Settings):
     def trigger_start_mode(self) -> int:
         """Get the trigger start mode.
 
+        Returns an integer code; use TriggerStartMode(code) for its named setting.
+
         Returns
         -------
         mode : {0, 1} or str
@@ -1354,17 +1475,18 @@ class sr830(_Settings):
         return self._trigger_start_mode
 
     @trigger_start_mode.setter
-    def trigger_start_mode(self, mode: int) -> None:
+    def trigger_start_mode(self, mode: TriggerStartMode | int) -> None:
         """Set the trigger start mode.
 
         Parameters
         ----------
-        mode : {0, 1}
+        mode : TriggerStartMode or int
             Trigger start mode:
 
                 * 0 : Off
                 * 1 : Start scan
         """
+        _validate_enum(mode, TriggerStartMode)
         if mode in [0, 1]:
             self._trigger_start_mode = int(mode)
         else:
@@ -1402,13 +1524,13 @@ class sr830(_Settings):
 
     # --- Data transfer commands ---
 
-    def measure(self, parameter: int) -> float:
+    def measure(self, parameter: MeasurementParameter | int) -> float:
         """Read the value of X, Y, R, or phase.
 
         Parameters
         ----------
-        parameter : {1, 2, 3, 4}
-            Measured parameter:
+        parameter : MeasurementParameter or int
+            Measured parameter; only X, Y, R, and PHASE are accepted:
 
                 * 1 : X
                 * 2 : Y
@@ -1420,6 +1542,7 @@ class sr830(_Settings):
         value : float
             Value of measured parameter in volts or degrees.
         """
+        _validate_enum(parameter, MeasurementParameter)
         if parameter in range(1, 5):
             return 1.0
         else:
@@ -1428,12 +1551,12 @@ class sr830(_Settings):
                 + "(phase)."
             )
 
-    def read_display(self, channel: int) -> float:
+    def read_display(self, channel: Channel | int) -> float:
         """Read the value of a channel display.
 
         Parameters
         ----------
-        channel : {1, 2}
+        channel : Channel or int
             Channel display to read:
 
                 * 1 : CH1
@@ -1444,12 +1567,16 @@ class sr830(_Settings):
         value : float
             Displayed value in display units.
         """
+        _validate_enum(channel, Channel)
         if channel in [1, 2]:
             return 1.0
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
-    def measure_multiple(self, parameters: Sequence[int]) -> Iterator[float]:
+    def measure_multiple(
+        self,
+        parameters: Sequence[MeasurementParameter | int],
+    ) -> Iterator[float]:
         """Read multiple (2-6) parameter values simultaneously.
 
         The values of X and Y are recorded at a single instant.
@@ -1464,9 +1591,9 @@ class sr830(_Settings):
         32µs. The frequency is computed only every other period or 40 ms,
         whichever is longer.
 
-        Paramters
-        ---------
-        paramters : list or tuple of int
+        Parameters
+        ----------
+        parameters : Sequence[MeasurementParameter | int]
             Parameters to measure:
 
                 * 1 : X
@@ -1486,6 +1613,8 @@ class sr830(_Settings):
         values : iterator of float
             Values of measured parameters.
         """
+        for parameter in parameters:
+            _validate_enum(parameter, MeasurementParameter)
         if all(p in range(1, 12) for p in parameters) and (
             len(parameters) in range(2, 7)
         ):
@@ -1510,7 +1639,7 @@ class sr830(_Settings):
 
     def get_ascii_buffer_data(
         self,
-        channel: int,
+        channel: Channel | int,
         start_bin: int,
         bins: int,
     ) -> tuple[float, ...]:
@@ -1528,7 +1657,7 @@ class sr830(_Settings):
 
         Parameters
         ----------
-        channel : {1, 2}
+        channel : Channel or int
             Channel 1 or 2.
         start_bin : int
             Starting bin to read where 0 is oldest. Must be in range 0 - 16382.
@@ -1540,8 +1669,9 @@ class sr830(_Settings):
         buffer : tuple of float
             Data stored in buffer range.
         """
+        _validate_enum(channel, Channel)
         if (
-            (channel in range(3))
+            (channel in (1, 2))
             and (start_bin in range(16383))
             and (bins in range(1, 16384))
         ):
@@ -1555,7 +1685,7 @@ class sr830(_Settings):
 
     def get_binary_buffer_data(
         self,
-        channel: int,
+        channel: Channel | int,
         start_bin: int,
         bins: int,
     ) -> tuple[float, ...]:
@@ -1573,7 +1703,7 @@ class sr830(_Settings):
 
         Parameters
         ----------
-        channel : {1, 2}
+        channel : Channel or int
             Channel 1 or 2.
         start_bin : int
             Starting bin to read where 0 is oldest. Must be in range 0 - 16382.
@@ -1585,6 +1715,7 @@ class sr830(_Settings):
         buffer : tuple of float
             Data stored in buffer range.
         """
+        _validate_enum(channel, Channel)
         if (
             (channel in [1, 2])
             and (start_bin >= 0)
@@ -1602,7 +1733,7 @@ class sr830(_Settings):
 
     def get_non_norm_buffer_data(
         self,
-        channel: int,
+        channel: Channel | int,
         start_bin: int,
         bins: int,
     ) -> tuple[float, ...]:
@@ -1621,7 +1752,7 @@ class sr830(_Settings):
 
         Parameters
         ----------
-        channel : {1, 2}
+        channel : Channel or int
             Channel 1 or 2.
         start_bin : int
             Starting bin to read where 0 is oldest. Must be in range 0 - 16382.
@@ -1633,6 +1764,7 @@ class sr830(_Settings):
         buffer : tuple of float
             Data stored in buffer range.
         """
+        _validate_enum(channel, Channel)
         if (
             (channel in [1, 2])
             and (start_bin >= 0)
@@ -1652,6 +1784,8 @@ class sr830(_Settings):
     def data_transfer_mode(self) -> int:
         """Get the data transfer mode.
 
+        Returns an integer code; use DataTransferMode(code) for its named setting.
+
         Returns
         -------
         mode : {0, 1, 2}
@@ -1664,20 +1798,21 @@ class sr830(_Settings):
         return self._data_transfer_mode
 
     @data_transfer_mode.setter
-    def data_transfer_mode(self, mode: int) -> None:
+    def data_transfer_mode(self, mode: DataTransferMode | int) -> None:
         """Set the data transfer mode.
 
         GPIB only.
 
         Parameters
         ----------
-        mode : {0, 1, 2}
+        mode : DataTransferMode or int
             Data transfer mode:
 
                 * 0 : Off
                 * 1 : On (DOS)
                 * 2 : On (Windows)
         """
+        _validate_enum(mode, DataTransferMode)
         if mode in range(3):
             self._data_transfer_mode = int(mode)
         else:
@@ -1712,6 +1847,8 @@ class sr830(_Settings):
     def local_mode(self) -> int:
         """Get the local/remote function.
 
+        Returns an integer code; use LocalMode(code) for its named setting.
+
         Returns
         -------
         local : {0, 1, 2}
@@ -1724,18 +1861,19 @@ class sr830(_Settings):
         return self._local_mode
 
     @local_mode.setter
-    def local_mode(self, mode: int) -> None:
+    def local_mode(self, mode: LocalMode | int) -> None:
         """Set the local/remote function.
 
         Parameters
         ----------
-        mode : {0, 1, 2}
+        mode : LocalMode or int
             Local/remote function:
 
                 * 0 : LOCAL
                 * 1 : REMOTE
                 * 2 : LOCAL LOCKOUT
         """
+        _validate_enum(mode, LocalMode)
         if mode in range(3):
             self._local_mode = int(mode)
         else:
@@ -1747,6 +1885,8 @@ class sr830(_Settings):
     @property
     def gpib_override_remote(self) -> int:
         """Get the GPIB override remote condition.
+
+        Returns an integer code; use GpibOverrideRemote(code) for its named setting.
 
         Under normal operation every GPIB command puts the instrument in the remote
         state with the front panel deactivated.
@@ -1762,7 +1902,7 @@ class sr830(_Settings):
         return self._gpib_override_remote
 
     @gpib_override_remote.setter
-    def gpib_override_remote(self, condition: int) -> None:
+    def gpib_override_remote(self, condition: GpibOverrideRemote | int) -> None:
         """Set the GPIB override remote condition.
 
         Under normal operation every GPIB command puts the instrument in the remote
@@ -1770,12 +1910,13 @@ class sr830(_Settings):
 
         Parameters
         ----------
-        condition : int
+        condition : GpibOverrideRemote or int
             GPIB override remote condition:
 
                 * 0 : No
                 * 1 : Yes
         """
+        _validate_enum(condition, GpibOverrideRemote)
         if condition in [0, 1]:
             self._gpib_override_remote = int(condition)
         else:
@@ -1792,26 +1933,29 @@ class sr830(_Settings):
 
     def set_enable_register(
         self,
-        register: str,
-        value: int,
+        register: StatusRegister | str,
+        value: StandardEventFlag | SerialPollFlag | ErrorFlag | LiaStatusFlag | SwitchState | int,
         decimal: bool = True,
-        bit: int | None = None,
+        bit: StandardEventBit | SerialPollBit | ErrorBit | LiaStatusBit | int | None = None,
     ) -> None:
         """Set an enable register.
 
         Parameters
         ----------
-        register : {"standard_event", "serial_poll", "error", "lia_status"}
+        register : StatusRegister or str
             Enable register to set.
-        value : {0-255} or {0, 1}
-            Value of standard event enable register. If decimal is true, value is in
-            the range 0-255. Otherwise value is applied to a specific bit given by
-            argument to 0 or 1.
+        value : StandardEventFlag | SerialPollFlag | ErrorFlag | LiaStatusFlag | SwitchState or int
+            Whole-byte mask (0-255) when decimal=True; use the flag type
+            matching the register and combine flags with |. When decimal=False,
+            use SwitchState or 0/1 for the bit specified by bit.
         decimal : bool, optional
-            If `value` is decimal or binary.
-        bit : None or {0-7}, optional
-            Specific bit to set with a binary value.
+            True writes a whole-byte mask; False writes a single bit state.
+        bit : StandardEventBit | SerialPollBit | ErrorBit | LiaStatusBit or int, optional
+            Bit position, not a mask. Use the bit enum matching the register
+            or an integer from 0 to 7; required when decimal=False.
         """
+        _validate_register_bit(register, bit)
+        _validate_register_value(register, value, decimal)
         if register in (registers := self._enable_register_cmd_dict.keys()):
             # TODO: make dummy variables
             pass
@@ -1821,21 +1965,27 @@ class sr830(_Settings):
                 + f"{', '.join(list(registers))}."
             )
 
-    def get_enable_register(self, register: str, bit: int | None = None) -> None:
+    def get_enable_register(
+        self,
+        register: StatusRegister | str,
+        bit: StandardEventBit | SerialPollBit | ErrorBit | LiaStatusBit | int | None = None,
+    ) -> None:
         """Get the standard event enable register value.
 
         Parameters
         ----------
-        register : {"standard_event", "serial_poll", "error", "lia_status"}
+        register : StatusRegister or str
             Enable register to get.
-        bit : None or {0-7}, optional
-            Specific bit to query. If `None`, query entire byte.
+        bit : StandardEventBit | SerialPollBit | ErrorBit | LiaStatusBit or int, optional
+            Bit position, not a mask; the enum must match the register.
+            If None, query the entire byte (an integer mask).
 
         Returns
         -------
-        value : int
-            Register value.
+        value : None
+            Status-register simulation is not implemented.
         """
+        _validate_register_bit(register, bit)
         if register in (registers := self._enable_register_cmd_dict.keys()):
             # TODO: make dummy variables
             pass
@@ -1845,23 +1995,29 @@ class sr830(_Settings):
                 + f"{', '.join(list(registers))}."
             )
 
-    def get_status_byte(self, status_byte: str, bit: int | None = None) -> None:
+    def get_status_byte(
+        self,
+        status_byte: StatusRegister | str,
+        bit: StandardEventBit | SerialPollBit | ErrorBit | LiaStatusBit | int | None = None,
+    ) -> None:
         """Get a status byte.
 
         This function has no error check to avoid infinite recursion.
 
         Parameters
         ----------
-        status_byte : {"standard_event", "serial_poll", "error", "lia_status"}
+        status_byte : StatusRegister or str
             Status byte to get.
-        bit : None or {0-7}, optional
-            Specific bit to get with a binary value. If `None` query entire byte.
+        bit : StandardEventBit | SerialPollBit | ErrorBit | LiaStatusBit or int, optional
+            Bit position, not a mask; the enum must match the register.
+            If None, query the entire byte (an integer mask).
 
         Returns
         -------
         value : int
             Status byte value.
         """
+        _validate_register_bit(status_byte, bit)
         if status_byte in (status_bytes := self._status_byte_cmd_dict.keys()):
             # TODO: make dummy variables
             pass
@@ -1875,6 +2031,8 @@ class sr830(_Settings):
     def power_on_status_clear_bit(self) -> int:
         """Get the power-on status clear bit.
 
+        Returns an integer code; use SwitchState(code) for its named setting.
+
         Returns
         -------
         value : int
@@ -1883,17 +2041,18 @@ class sr830(_Settings):
         return self._power_on_status_clear_bit
 
     @power_on_status_clear_bit.setter
-    def power_on_status_clear_bit(self, value: int) -> None:
+    def power_on_status_clear_bit(self, value: SwitchState | int) -> None:
         """Set the power-on status clear bit.
 
         Parameters
         ----------
-        value : {0, 1}
+        value : SwitchState or int
             Value of power-on status clear bit. Values:
 
                 * 0 : Cleared, status enable registers maintain values at power down.
                 * 1 : Set, all status and enable registers are cleared on power up.
         """
+        _validate_enum(value, SwitchState)
         if value in [0, 1]:
             self._power_on_status_clear_bit = int(value)
         else:

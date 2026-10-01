@@ -85,26 +85,92 @@ remain unimplemented and return `None`.
 
 ## Named settings and value tables
 
-Named settings accept `IntEnum` members as well as the existing integer codes:
+Discrete settings accept their named enums or the existing integer codes. Enum
+values are instrument command codes, not physical values. Getters continue to
+return integer codes; construct the enum from a getter when a named result is
+wanted. Enum inputs must belong to the setting being used; an unrelated enum is
+rejected even when its number is in range.
 
 ```python
-from sr830 import LocalMode, ReferenceSource, sr830
+from sr830 import (
+    LowPassFilterSlope, SampleRate, Sensitivity, TimeConstant, sr830,
+)
 
 with sr830() as instrument:
     instrument.connect("ASRL2::INSTR")
-    instrument.local_mode = LocalMode.LOCAL_LOCKOUT
-    instrument.reference_source = ReferenceSource.INTERNAL
-    instrument.time_constant = 8  # Instrument code for 100 ms.
-    print(instrument.time_constants[instrument.time_constant])  # Seconds.
+    instrument.sensitivity = Sensitivity.u_1
+    instrument.time_constant = TimeConstant.ms_100
+    instrument.lowpass_filter_slope = LowPassFilterSlope.DB_12
+    instrument.sample_rate = SampleRate.Hz_512
+
+    selected = Sensitivity(instrument.sensitivity)
+    full_scale = instrument.sensitivities[selected]
+    # full_scale is 1e-6 V in voltage mode, or 1e-6 microamps in current mode.
 ```
 
+Sensitivity names use `<SI prefix>_<number>`, with `u` for micro. The multiplier
+applies to V for voltage inputs or microamps for current inputs. These are RMS
+full-scale ranges, not gains. `Sensitivity._1` is the unity multiplier (1 V or
+1 microamp); despite its leading underscore, it is a supported enum member.
+
+| Setting enum | Example | Instrument code | Meaning |
+| --- | --- | --- | --- |
+| `Sensitivity` | `u_1` | 8 | 1 microvolt or 1 picoamp full scale |
+| `Sensitivity` | `m_200` | 24 | 200 millivolts or 200 nanoamps full scale |
+| `Sensitivity` | `_1` | 26 | 1 volt or 1 microamp full scale |
+| `TimeConstant` | `ms_100` | 8 | 100 milliseconds |
+| `LowPassFilterSlope` | `DB_12` | 1 | 12 dB/octave |
+| `OutputExpansion` | `x_1`, `x_10`, `x_100` | 0, 1, 2 | Output expansion factors |
+| `SampleRate` | `mHz_62_5`, `Hz_512`, `TRIGGER` | 0, 13, 14 | Rate in Hz or triggered sampling |
+
 The enum types are defined in `sr830.settings` and exported by both `sr830` and
-`virtual_sr830`. They cover reference source/trigger, input configuration,
-grounding/coupling, filters, reserve mode, channel displays/ratios, output source
-and interface, on/off settings, buffer/trigger modes, data transfer, and local
-mode. For example, use `OutputInterface.GPIB` for an adapter's output interface
-or `SwitchState.ON` for the alarm. Getters continue to return integer codes;
-convert with `LocalMode(instrument.local_mode)` when an enum is wanted.
+`virtual_sr830`. Existing categorical enums cover reference source/trigger,
+input configuration, grounding/coupling, filters, reserve mode, channel
+displays/ratios, output source/interface, on/off settings, buffer/trigger modes,
+data transfer, and local mode.
+
+Selectors are named too: `Channel.CH1`, `AuxiliaryChannel.AUX4`,
+`OutputParameter.R`, and `MeasurementParameter.PHASE`. `measure()` accepts only
+X, Y, R, and PHASE; `measure_multiple()` also accepts the auxiliary inputs,
+reference frequency, and channel displays. Display and ratio enums must match
+the channel passed to `set_display()`.
+
+```python
+from sr830 import (
+    Channel, Channel1Display, Channel1Ratio, MeasurementParameter,
+    OutputExpansion, OutputParameter,
+)
+
+instrument.set_display(Channel.CH1, Channel1Display.R, Channel1Ratio.NONE)
+instrument.set_output_offset_expand(OutputParameter.R, 0.0, OutputExpansion.x_10)
+values = tuple(instrument.measure_multiple([
+    MeasurementParameter.X, MeasurementParameter.Y,
+]))
+```
+
+Register selectors retain their string values through `StatusRegister`. Each
+register has a separate `*Bit` enum of bit positions and `*Flag` enum of masks.
+Use positions for `bit=`, and combine masks with `|` for whole-byte operations.
+Both types must match the selected register. Integer bits/masks and string
+register names remain accepted.
+
+```python
+from sr830 import ErrorBit, ErrorFlag, StatusRegister, SwitchState
+
+instrument.set_enable_register(
+    StatusRegister.ERROR, ErrorFlag.RAM_ERROR | ErrorFlag.ROM_ERROR,
+)
+instrument.set_enable_register(
+    StatusRegister.ERROR, SwitchState.ON,
+    decimal=False, bit=ErrorBit.RAM_ERROR,
+)
+errors = ErrorFlag(instrument.get_status_byte(StatusRegister.ERROR))
+```
+
+The four position/mask pairs are `StandardEventBit`/`StandardEventFlag`,
+`SerialPollBit`/`SerialPollFlag`, `ErrorBit`/`ErrorFlag`, and
+`LiaStatusBit`/`LiaStatusFlag`. Virtual register getters remain unimplemented
+and return `None`.
 
 Both drivers inherit one shared set of `ClassVar` tables. Existing names,
 indices, labels, and numeric values are preserved; the table contents are
