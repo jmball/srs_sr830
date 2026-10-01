@@ -180,6 +180,63 @@ class ConnectionTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'not connected'):
             self.driver.reference_frequency
 
+    def test_io_helpers_reject_disconnected_instances(self):
+        operations = (
+            lambda: self.driver._write('*RST'),
+            lambda: self.driver._query('*IDN?'),
+            lambda: self.driver._query_ascii_values('TRCA? 1,0,1'),
+            lambda: self.driver._read_buffer_bytes('TRCB? 1,0,1', 4),
+            lambda: setattr(self.driver, 'output_interface', 1),
+        )
+        for connected_then_closed in (False, True):
+            if connected_then_closed:
+                self.connect()
+                self.driver.disconnect()
+            for operation in operations:
+                with self.subTest(operation=operation, previously_connected=connected_then_closed):
+                    with self.assertRaisesRegex(RuntimeError, '^Instrument is not connected\\.$'):
+                        operation()
+
+    def test_io_helpers_delegate_and_preserve_responses(self):
+        self.connect()
+        self.resource.write.reset_mock()
+        self.resource.write.return_value = 6  # PyVISA returns a byte count.
+        self.assertIsNone(self.driver._write('*RST'))
+        self.resource.write.assert_called_once_with('*RST')
+        self.resource.query.return_value = 'SR830,1234'
+        self.assertEqual(self.driver._query('*IDN?'), 'SR830,1234')
+        self.resource.query.assert_called_once_with('*IDN?')
+        self.resource.query_ascii_values.return_value = ['1.25', '-2.5', '']
+        self.assertEqual(self.driver._query_ascii_values('TRCA? 1,0,2'), ['1.25', '-2.5', ''])
+        args, kwargs = self.resource.query_ascii_values.call_args
+        self.assertEqual(args, ('TRCA? 1,0,2',))
+        self.assertIs(kwargs['container'], list)
+        self.assertEqual(kwargs['converter'](''), '')
+        self.assertEqual(kwargs['converter']('1.25'), '1.25')
+
+    def test_io_helpers_preserve_visa_errors(self):
+        self.connect()
+        failure = pyvisa.errors.VisaIOError(pyvisa.constants.StatusCode.error_timeout)
+        operations = (
+            (self.resource.write, lambda: self.driver._write('*RST')),
+            (self.resource.query, lambda: self.driver._query('*IDN?')),
+            (self.resource.query_ascii_values, lambda: self.driver._query_ascii_values('TRCA? 1,0,1')),
+        )
+        for method, operation in operations:
+            with self.subTest(method=method):
+                method.side_effect = failure
+                with self.assertRaises(pyvisa.errors.VisaIOError) as caught:
+                    operation()
+                self.assertIs(caught.exception, failure)
+                method.side_effect = None
+
+    def test_ascii_buffer_uses_guarded_query_and_preserves_parsing(self):
+        self.connect()
+        self.resource.query.return_value = '0'  # SEND? one-shot mode
+        self.resource.query_ascii_values.return_value = ['1.25', '-2.5', '']
+        self.assertEqual(self.driver.get_ascii_buffer_data(1, 0, 2), (1.25, -2.5))
+        self.assertEqual(self.resource.query_ascii_values.call_args.args, ('TRCA? 1,0,2',))
+
     def test_virtual_connection_matches_api_and_preserves_settings(self):
         for name, interface in (('ASRL1::INSTR', 0), ('GPIB0::14::INSTR', 1)):
             virtual = VirtualSR830()

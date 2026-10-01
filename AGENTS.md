@@ -46,8 +46,11 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
 - Follow the existing four-space indentation, snake_case methods and properties,
   and NumPy-style docstrings describing parameters, ranges, and units.
 - The hardware VISA resource is private (`self._instr`). Driver I/O uses
-  `_get_instr()` to obtain it or raise RuntimeError when disconnected. Getters
-  query the resource; setters validate values before writing instrument commands. Preserve command spelling, channel numbering, and
+  guarded `_write()`, `_query()`, `_query_ascii_values()`, and
+  `_read_buffer_bytes()` helpers. `_check_connected()` raises RuntimeError when
+  disconnected and returns no resource. Direct resource access is reserved for
+  connection lifecycle and framing configuration. Setters validate values before
+  writing commands. Preserve command spelling, channel numbering, and
   interface-specific binary transfer behavior.
 - The SR830 programming manual is linked in both implementation module
   docstrings. Consult it when changing protocol behavior.
