@@ -318,7 +318,6 @@ class sr830:
         *,
         resource_manager: pyvisa.ResourceManager | None = None,
         output_interface: int | None = None,
-        local_lockout: bool = True,
         **resource_kwargs: Any,
     ) -> None:
         """Select the virtual response interface without opening a VISA resource.
@@ -327,11 +326,16 @@ class sr830:
         adapters. A supplied manager is only used to resolve names or aliases;
         it remains caller-owned. Validate framing just like the hardware driver.
         Reconnecting requires disconnect first. Reset is an explicit operation.
+        Local mode is preserved; set local_mode explicitly to change it.
         """
         if self._connected:
             raise RuntimeError("Instrument is already connected; disconnect first.")
         if "reset" in resource_kwargs:
             raise TypeError("connect() no longer accepts reset; call reset() explicitly.")
+        if "local_lockout" in resource_kwargs:
+            raise TypeError(
+                "connect() no longer accepts local_lockout; set local_mode explicitly."
+            )
         if resource_manager is not None:
             interface_type = resource_manager.resource_info(resource_name).interface_type
         else:
@@ -340,7 +344,6 @@ class sr830:
         interface = resolve_output_interface(interface_type, output_interface)
         connection_kwargs(interface, resource_kwargs, interface_type=interface_type)
         self.output_interface = interface
-        self.local_mode = 2 if local_lockout else 1
         self._connected = True
 
     def disconnect(self) -> None:

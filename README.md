@@ -52,9 +52,18 @@ accepts CRLF, and native GPIB VISA resources can use EOI alone with
 match the instrument's front-panel settings.
 
 All connection options after the resource name are keyword-only. Connection
-selects the output interface, enables status registers, and enters remote mode
-with front-panel lockout by default; use `local_lockout=False` to allow the Local
-key. It preserves measurement settings and does not reset the instrument. Call
+selects the output interface and enables status registers. Set `local_mode`
+explicitly after connecting to select local (`0`), remote (`1`), or local lockout
+(`2`):
+
+```python
+instrument.connect("ASRL2::INSTR")
+instrument.local_mode = 2  # Disable the front-panel Local key.
+```
+
+`local_lockout=` is no longer accepted by `connect()`. GPIB commands can still
+put the instrument into remote mode automatically. Connection preserves
+measurement settings and does not reset the instrument. Call
 `instrument.reset()` explicitly when wanted; `reset=` is no longer accepted by
 `connect()`.
 

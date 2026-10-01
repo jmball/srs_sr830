@@ -79,10 +79,11 @@ before relying on this suite.
 
 Real hardware runs require a user-provided VISA resource and appropriate
 authorization to change its settings. `connect()` never resets the instrument;
-reset is an explicit caller operation. It locks the front panel by default,
-enables status registers, and selects the response interface (`0` RS232,
-`1` GPIB), inferred for ASRL/GPIB and explicit for ambiguous adapters. Even
-`local_lockout=False` changes settings. Connection options are keyword-only,
+reset is an explicit caller operation. It enables status registers and selects
+the response interface (`0` RS232, `1` GPIB), inferred for ASRL/GPIB and explicit
+for ambiguous adapters. Local mode and lockout are explicit caller settings via
+`local_mode`; `connect()` rejects the removed `local_lockout` option and sends
+no `LOCL` command. Connection options are keyword-only,
 conflicting framing is rejected, and connecting twice raises. Disconnect clears
 `instr`, is idempotent, and closes only the resource; managers remain open
 because PyVISA shares them. Disconnect after hardware work; the hardware

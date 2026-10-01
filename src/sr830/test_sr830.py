@@ -75,7 +75,6 @@ def test_connect():
     lia.connect(
         args.resource_name,
         output_interface=args.output_interface,
-        local_lockout=False,
     )
     assert lia.instr.session is not None
 

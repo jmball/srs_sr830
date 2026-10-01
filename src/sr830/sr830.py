@@ -309,7 +309,6 @@ class sr830:
         *,
         resource_manager: pyvisa.ResourceManager | None = None,
         output_interface: int | None = None,
-        local_lockout: bool = True,
         **resource_kwargs: Any,
     ) -> None:
         """Open and initialize a VISA connection without resetting the instrument.
@@ -326,8 +325,6 @@ class sr830:
             Instrument-side response interface: 0 (RS232) or 1 (GPIB). Inferred
             for ASRL and GPIB VISA resources. Required for ambiguous resources,
             including TCP/IP adapters. An explicit value overrides inference.
-        local_lockout : bool, optional
-            Disable the front-panel Local key if True; otherwise allow it.
         resource_kwargs : Any
             VISA opening options and resource attributes. Read termination must
             be CR for RS232 or LF for GPIB. Write termination defaults to LF; CR and CRLF are
@@ -338,7 +335,8 @@ class sr830:
         -----
         The driver owns the opened resource. A second connect raises RuntimeError
         until disconnect is called. Initialization selects the response interface,
-        enables status registers, and sets local lockout before publishing instr.
+        and enables status registers before publishing instr. Set local_mode
+        explicitly after connecting to select remote mode or local lockout.
         Failures close the resource and leave the instance disconnected; commands
         already sent to the instrument cannot be rolled back. Call reset()
         explicitly if a factory reset is wanted.
@@ -347,6 +345,10 @@ class sr830:
             raise RuntimeError("Instrument is already connected; disconnect first.")
         if "reset" in resource_kwargs:
             raise TypeError("connect() no longer accepts reset; call reset() explicitly.")
+        if "local_lockout" in resource_kwargs:
+            raise TypeError(
+                "connect() no longer accepts local_lockout; set local_mode explicitly."
+            )
         manager = (
             resource_manager if resource_manager is not None else pyvisa.ResourceManager()
         )
@@ -371,7 +373,6 @@ class sr830:
             resource.write(f"OUTX {interface}")
             for command in self._enable_register_cmd_dict.values():
                 resource.write(f"{command} 255")
-            resource.write(f"LOCL {2 if local_lockout else 1}")
         except BaseException:
             # Preserve the initialization error even if close also fails.
             with suppress(Exception):

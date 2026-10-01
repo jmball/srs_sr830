@@ -31,7 +31,7 @@ class ConnectionTests(unittest.TestCase):
 
     def test_serial_inference_and_initialization(self):
         self.resource.write.side_effect = lambda command: self.assertIsNone(self.driver.instr)
-        self.connect(baud_rate=19200, local_lockout=False, open_timeout=1000)
+        self.connect(baud_rate=19200, open_timeout=1000)
         self.manager.open_resource.assert_called_once_with('alias', open_timeout=1000)
         self.assertIs(self.driver.instr, self.resource)
         self.assertIs(self.driver._resource_manager, self.manager)
@@ -40,7 +40,7 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(self.resource.baud_rate, 19200)
         self.assertEqual(
             [c.args[0] for c in self.resource.write.call_args_list],
-            ['OUTX 0', '*ESE 255', '*SRE 255', 'ERRE 255', 'LIAE 255', 'LOCL 1'],
+            ['OUTX 0', '*ESE 255', '*SRE 255', 'ERRE 255', 'LIAE 255'],
         )
 
     def test_gpib_inference(self):
@@ -84,7 +84,7 @@ class ConnectionTests(unittest.TestCase):
             self.driver.disconnect()
 
     def test_each_initialization_command_failure_closes_resource(self):
-        for failed_command in range(6):
+        for failed_command in range(5):
             self.resource.reset_mock()
             self.resource.write.side_effect = [None] * failed_command + [OSError('write failed')]
             with self.assertRaisesRegex(OSError, 'write failed'):
@@ -210,6 +210,33 @@ class ConnectionTests(unittest.TestCase):
         self.manager.resource_info.return_value.interface_type = InterfaceType.tcpip
         with self.assertRaises(ValueError):
             self.connect(output_interface=1, write_termination=None)
+        self.manager.open_resource.assert_not_called()
+
+    def test_local_mode_is_an_explicit_caller_setting(self):
+        self.connect()
+        self.assertFalse(
+            any(c.args[0].startswith('LOCL') for c in self.resource.write.call_args_list)
+        )
+        self.driver.local_mode = 2
+        self.resource.write.assert_called_with('LOCL 2')
+        self.driver.local_mode = 1
+        self.resource.write.assert_called_with('LOCL 1')
+        for mode in (0, 1, 2):
+            with self.subTest(mode=mode):
+                virtual = VirtualSR830()
+                virtual.local_mode = mode
+                virtual.connect('ASRL1::INSTR')
+                self.assertEqual(virtual.local_mode, mode)
+
+    def test_removed_local_lockout_option_is_rejected_before_opening(self):
+        for value in (False, True):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(TypeError, 'set local_mode explicitly'):
+                    self.connect(local_lockout=value)
+                virtual = VirtualSR830()
+                with self.assertRaisesRegex(TypeError, 'set local_mode explicitly'):
+                    virtual.connect('ASRL1::INSTR', local_lockout=value)
+                self.assertFalse(virtual._connected)
         self.manager.open_resource.assert_not_called()
 
     def test_getters_query_responses(self):
