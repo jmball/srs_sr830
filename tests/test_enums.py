@@ -43,15 +43,17 @@ class EnumTests(unittest.TestCase):
                     self.assertIs(getattr(virtual_sr830, name), enum)
 
     def test_numeric_names_codes_and_physical_tables(self):
-        self.assertEqual(settings.Sensitivity.u_1, 8)
-        self.assertEqual(settings.Sensitivity.m_200, 24)
-        self.assertEqual(settings.Sensitivity._1, 26)
-        self.assertIs(settings.Sensitivity(26), settings.Sensitivity._1)
-        self.assertIs(settings.Sensitivity.__members__['_1'], settings.Sensitivity._1)
+        self.assertEqual(settings.Sensitivity.x1u, 8)
+        self.assertEqual(settings.Sensitivity.x200m, 24)
+        self.assertEqual(settings.Sensitivity.x1, 26)
+        self.assertIs(settings.Sensitivity(26), settings.Sensitivity.x1)
+        self.assertIs(settings.Sensitivity.__members__['x1'], settings.Sensitivity.x1)
         for name, enum, command, table in NUMERIC_PROPERTIES:
             self.assertEqual([int(member) for member in enum], list(range(len(getattr(self.hardware, table)))))
         for member in settings.Sensitivity:
-            prefix, number = member.name.split('_')
+            self.assertTrue(member.name.startswith('x'))
+            prefix = member.name[-1] if member.name[-1].isalpha() else ''
+            number = member.name[1:-1] if prefix else member.name[1:]
             multiplier = {'n': 1e-9, 'u': 1e-6, 'm': 1e-3, '': 1}[prefix]
             self.assertAlmostEqual(self.hardware.sensitivities[member] / (int(number) * multiplier), 1)
         for member in settings.TimeConstant:

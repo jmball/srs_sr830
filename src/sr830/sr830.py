@@ -686,8 +686,8 @@ class sr830(_Settings):
         ----------
         sensitivity : Sensitivity or int
             RMS full-scale amplitude (not gain), in V for voltage inputs or
-            microamps for current inputs. Sensitivity names use <prefix>_<number>,
-            with u for micro and _1 for unity:
+            microamps for current inputs. Names use x<number><SI prefix>,
+            with u for micro (x1u) and x1 for the unity multiplier:
 
                 * 0 : 2e-9
                 * 1 : 5e-9

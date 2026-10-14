@@ -169,38 +169,39 @@ class GpibOverrideRemote(IntEnum):
 class Sensitivity(IntEnum):
     """SENS codes for RMS full-scale amplitudes, not gains.
 
-    Names use ``<SI prefix>_<number>`` (``u`` means micro); ``_1`` has no
-    prefix. The multiplier applies to V for voltage inputs or microamps for
-    current inputs: ``u_1`` selects 1 microvolt or 1 picoamp. Values are codes.
+    Names use ``x<number><SI prefix>`` (``u`` means micro); ``x1`` is unity.
+    The full-scale multiplier applies to V for voltage inputs or microamps
+    for current inputs: ``x1u`` selects 1 microvolt or 1 picoamp. It does not
+    represent amplifier gain. Enum values are instrument command codes.
     """
 
-    n_2 = 0
-    n_5 = 1
-    n_10 = 2
-    n_20 = 3
-    n_50 = 4
-    n_100 = 5
-    n_200 = 6
-    n_500 = 7
-    u_1 = 8
-    u_2 = 9
-    u_5 = 10
-    u_10 = 11
-    u_20 = 12
-    u_50 = 13
-    u_100 = 14
-    u_200 = 15
-    u_500 = 16
-    m_1 = 17
-    m_2 = 18
-    m_5 = 19
-    m_10 = 20
-    m_20 = 21
-    m_50 = 22
-    m_100 = 23
-    m_200 = 24
-    m_500 = 25
-    _1 = 26
+    x2n = 0
+    x5n = 1
+    x10n = 2
+    x20n = 3
+    x50n = 4
+    x100n = 5
+    x200n = 6
+    x500n = 7
+    x1u = 8
+    x2u = 9
+    x5u = 10
+    x10u = 11
+    x20u = 12
+    x50u = 13
+    x100u = 14
+    x200u = 15
+    x500u = 16
+    x1m = 17
+    x2m = 18
+    x5m = 19
+    x10m = 20
+    x20m = 21
+    x50m = 22
+    x100m = 23
+    x200m = 24
+    x500m = 25
+    x1 = 26
 
 
 class TimeConstant(IntEnum):

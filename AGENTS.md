@@ -47,7 +47,8 @@ Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
   enums, the channel. Register bit-position enums and IntFlag masks must match
   their register and must not be interchanged. Explicitly serialize command codes
   as integers, including SNAP lists, for Python 3.10 compatibility. Sensitivity
-  names use SI prefix and number (u_1, m_200); _1 is a public unity member.
+  names use x<number><SI prefix> (x1u, x200m); x1 is the unity multiplier.
+  The multiplier applies to the full-scale amplitude, not amplifier gain.
   Sensitivities are RMS full-scale values in V for voltage inputs and microamps
   for current inputs; time constants are in seconds, and sample rates are in Hz.
   OutputExpansion.x_1 has code 0 (the legacy expands tuple still contains 0).

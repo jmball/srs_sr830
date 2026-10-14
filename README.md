@@ -98,7 +98,7 @@ from sr830 import (
 
 with sr830() as instrument:
     instrument.connect("ASRL2::INSTR")
-    instrument.sensitivity = Sensitivity.u_1
+    instrument.sensitivity = Sensitivity.x1u
     instrument.time_constant = TimeConstant.ms_100
     instrument.lowpass_filter_slope = LowPassFilterSlope.DB_12
     instrument.sample_rate = SampleRate.Hz_512
@@ -108,16 +108,16 @@ with sr830() as instrument:
     # full_scale is 1e-6 V in voltage mode, or 1e-6 microamps in current mode.
 ```
 
-Sensitivity names use `<SI prefix>_<number>`, with `u` for micro. The multiplier
-applies to V for voltage inputs or microamps for current inputs. These are RMS
-full-scale ranges, not gains. `Sensitivity._1` is the unity multiplier (1 V or
-1 microamp); despite its leading underscore, it is a supported enum member.
+Sensitivity names use `x<number><SI prefix>`, with `u` for micro. The `x`
+indicates a full-scale amplitude multiplier applied to V for voltage inputs or
+microamps for current inputs, not amplifier gain. `Sensitivity.x1` is the unity
+multiplier (1 V or 1 microamp).
 
 | Setting enum | Example | Instrument code | Meaning |
 | --- | --- | --- | --- |
-| `Sensitivity` | `u_1` | 8 | 1 microvolt or 1 picoamp full scale |
-| `Sensitivity` | `m_200` | 24 | 200 millivolts or 200 nanoamps full scale |
-| `Sensitivity` | `_1` | 26 | 1 volt or 1 microamp full scale |
+| `Sensitivity` | `x1u` | 8 | 1 microvolt or 1 picoamp full scale |
+| `Sensitivity` | `x200m` | 24 | 200 millivolts or 200 nanoamps full scale |
+| `Sensitivity` | `x1` | 26 | 1 volt or 1 microamp full scale |
 | `TimeConstant` | `ms_100` | 8 | 100 milliseconds |
 | `LowPassFilterSlope` | `DB_12` | 1 | 12 dB/octave |
 | `OutputExpansion` | `x_1`, `x_10`, `x_100` | 0, 1, 2 | Output expansion factors |
