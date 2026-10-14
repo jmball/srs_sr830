@@ -32,7 +32,8 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
   configuration here; there is no `setup.cfg` or `setup.py`.
 
 The distribution is named `srs_sr830`; imports are `sr830` and `virtual_sr830`.
-Both expose a lowercase `sr830` class, for example `sr830.sr830()`.
+The hardware class is `sr830.SR830`; the virtual class is
+`virtual_sr830.VirtualSR830`. Export these explicitly from their packages.
 
 ## Development conventions
 

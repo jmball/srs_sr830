@@ -42,9 +42,9 @@ class SettingsTests(unittest.TestCase):
                 self.assertEqual([int(member) for member in enum], list(range(len(enum))))
 
     def test_enums_and_integers_emit_identical_commands(self):
-        hardware = sr830.sr830()
+        hardware = sr830.SR830()
         hardware._instr = Mock(spec=MessageBasedResource)
-        virtual = virtual_sr830.sr830()
+        virtual = virtual_sr830.VirtualSR830()
         for name, code, command in PROPERTY_CODES:
             for value in (code, int(code)):
                 with self.subTest(name=name, value=value):
@@ -60,7 +60,7 @@ class SettingsTests(unittest.TestCase):
                     self.assertEqual(result, int(code))
 
     def test_invalid_integer_codes_still_raise(self):
-        for cls in (sr830.sr830, virtual_sr830.sr830):
+        for cls in (sr830.SR830, virtual_sr830.VirtualSR830):
             driver = cls()
             for name, code, command in PROPERTY_CODES:
                 invalid = max(int(member) for member in type(code)) + 1
@@ -69,9 +69,9 @@ class SettingsTests(unittest.TestCase):
                         setattr(driver, name, invalid)
 
     def test_display_enums_preserve_integer_tuple_returns(self):
-        hardware = sr830.sr830()
+        hardware = sr830.SR830()
         hardware._instr = Mock(spec=MessageBasedResource)
-        virtual = virtual_sr830.sr830()
+        virtual = virtual_sr830.VirtualSR830()
         for channel, display, ratio in (
             (1, settings.Channel1Display.AUX_IN_2, settings.Channel1Ratio.AUX_IN_1),
             (2, settings.Channel2Display.PHASE, settings.Channel2Ratio.AUX_IN_4),
@@ -89,7 +89,7 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(virtual.get_front_output(channel), 1)
 
     def test_connect_accepts_named_output_interface(self):
-        virtual = virtual_sr830.sr830()
+        virtual = virtual_sr830.VirtualSR830()
         virtual.connect('TCPIP0::example.invalid::1234::SOCKET', output_interface=settings.OutputInterface.GPIB)
         self.assertIs(type(virtual.output_interface), int)
         self.assertEqual(virtual.output_interface, 1)

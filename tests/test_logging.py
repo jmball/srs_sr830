@@ -14,12 +14,12 @@ import pyvisa
 from pyvisa.constants import InterfaceType
 from pyvisa.resources import SerialInstrument
 
-from sr830 import sr830
+from sr830 import SR830
 
 
 class LoggingTests(unittest.TestCase):
     def setUp(self):
-        self.driver = sr830()
+        self.driver = SR830()
         self.resource = Mock(spec=SerialInstrument)
         self.manager = Mock(spec=pyvisa.ResourceManager)
         self.manager.resource_info.return_value = SimpleNamespace(

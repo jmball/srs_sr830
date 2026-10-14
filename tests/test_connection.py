@@ -12,13 +12,13 @@ import pyvisa
 from pyvisa.constants import InterfaceType, SerialTermination
 from pyvisa.resources import SerialInstrument
 
-from sr830 import sr830
-from virtual_sr830 import sr830 as VirtualSR830
+from sr830 import SR830
+from virtual_sr830 import VirtualSR830
 
 
 class ConnectionTests(unittest.TestCase):
     def setUp(self):
-        self.driver = sr830()
+        self.driver = SR830()
         self.resource = Mock(spec=SerialInstrument)
         self.manager = Mock(spec=pyvisa.ResourceManager)
         self.manager.resource_info.return_value = SimpleNamespace(
@@ -334,8 +334,8 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(self.resource.end_input, original_end)
 
     def test_all_driver_methods_have_resolvable_annotations(self):
-        for cls in (sr830, VirtualSR830):
-            self.assertEqual(inspect.signature(cls.connect), inspect.signature(sr830.connect))
+        for cls in (SR830, VirtualSR830):
+            self.assertEqual(inspect.signature(cls.connect), inspect.signature(SR830.connect))
             for name, member in vars(cls).items():
                 functions = [member] if inspect.isfunction(member) else []
                 if isinstance(member, property):

@@ -31,10 +31,10 @@ REGISTER_TYPES = (
 
 class EnumTests(unittest.TestCase):
     def setUp(self):
-        self.hardware = sr830.sr830()
+        self.hardware = sr830.SR830()
         self.resource = Mock(spec=MessageBasedResource)
         self.hardware._instr = self.resource
-        self.virtual = virtual_sr830.sr830()
+        self.virtual = virtual_sr830.VirtualSR830()
 
     def test_all_enums_are_exported_by_both_packages(self):
         for name, enum in vars(settings).items():
@@ -240,13 +240,13 @@ class EnumTests(unittest.TestCase):
         self.resource.query.assert_not_called()
 
     def test_annotations_expose_enum_inputs_and_integer_getters(self):
-        for cls in (sr830.sr830, virtual_sr830.sr830):
+        for cls in (sr830.SR830, virtual_sr830.VirtualSR830):
             for name, enum, command in NUMERIC_PROPERTIES:
                 setter_hints = typing.get_type_hints(getattr(cls, name).fset)
                 parameter = next(value for key, value in setter_hints.items() if key != 'return')
                 self.assertEqual(set(typing.get_args(parameter)), {enum, int})
                 self.assertIs(typing.get_type_hints(getattr(cls, name).fget)['return'], int)
-            self.assertEqual(inspect.signature(cls.connect), inspect.signature(sr830.sr830.connect))
+            self.assertEqual(inspect.signature(cls.connect), inspect.signature(sr830.SR830.connect))
 
 
 if __name__ == '__main__':

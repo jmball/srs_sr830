@@ -61,7 +61,7 @@ from sr830.settings import (
 import warnings
 
 
-class sr830:
+class VirtualSR830:
     """Virtual Stanford Research Systems SR830 LIA instrument."""
 
     def __init__(self) -> None:
@@ -69,7 +69,7 @@ class sr830:
         self._connected = False
         self._set_dummy_properties()
 
-    def __enter__(self) -> sr830:
+    def __enter__(self) -> VirtualSR830:
         """Enter the runtime context related to this object."""
         return self
 

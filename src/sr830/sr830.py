@@ -72,7 +72,7 @@ logger.addHandler(logging.NullHandler())
 _NOT_CONNECTED_MESSAGE = "Instrument is not connected."
 
 
-class sr830:
+class SR830:
     """Stanford Research Systems SR830 LIA instrument.
 
     Use connect() to open a VISA connection and disconnect() to close it.
@@ -125,7 +125,7 @@ class sr830:
             finally:
                 resource.read_termination = termination
 
-    def __enter__(self) -> sr830:
+    def __enter__(self) -> SR830:
         """Enter the runtime context related to this object."""
         return self
 

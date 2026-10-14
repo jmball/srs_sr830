@@ -6,7 +6,7 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
-from .sr830 import *
+from .sr830 import SR830 as SR830
 
 from .settings import (
     ReferenceSource as ReferenceSource,

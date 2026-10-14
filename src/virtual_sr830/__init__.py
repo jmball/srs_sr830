@@ -6,7 +6,7 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
-from .virtual_sr830 import *
+from .virtual_sr830 import VirtualSR830 as VirtualSR830
 
 from sr830.settings import (
     ReferenceSource as ReferenceSource,

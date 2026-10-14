@@ -24,7 +24,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-lia = sr830.sr830()
+lia = sr830.SR830()
 
 
 def _int_property_test(settings, lia_property):

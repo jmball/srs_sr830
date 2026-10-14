@@ -17,7 +17,8 @@ python3 -m venv .venv
 ```
 
 Package metadata, dependencies, and build configuration are in `pyproject.toml`.
-The distribution installs both `sr830` and `virtual_sr830`. Hardware access
+The distribution installs both `sr830` and `virtual_sr830`. The classes are
+`sr830.SR830` and `virtual_sr830.VirtualSR830`. Hardware access
 requires an appropriate VISA backend and a connected instrument.
 
 ## Connections
@@ -25,7 +26,7 @@ requires an appropriate VISA backend and a connected instrument.
 ```python
 import sr830
 
-with sr830.sr830() as instrument:
+with sr830.SR830() as instrument:
     instrument.connect("ASRL2::INSTR", baud_rate=9600)
     print(instrument.reference_frequency)
 ```
@@ -93,10 +94,10 @@ rejected even when its number is in range.
 
 ```python
 from sr830 import (
-    LowPassFilterSlope, SampleRate, Sensitivity, TimeConstant, sr830,
+    LowPassFilterSlope, SampleRate, Sensitivity, TimeConstant, SR830,
 )
 
-with sr830() as instrument:
+with SR830() as instrument:
     instrument.connect("ASRL2::INSTR")
     instrument.sensitivity = Sensitivity.x1u
     instrument.time_constant = TimeConstant.ms_100
