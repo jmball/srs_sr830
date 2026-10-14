@@ -51,7 +51,8 @@ from sr830.settings import (
     SynchronousFilter,
     TimeConstant,
     TriggerStartMode,
-    _Settings,
+    _ENABLE_REGISTER_COMMANDS,
+    _STATUS_REGISTER_COMMANDS,
     _validate_enum,
     _validate_register_bit,
     _validate_register_value,
@@ -60,7 +61,7 @@ from sr830.settings import (
 import warnings
 
 
-class sr830(_Settings):
+class sr830:
     """Virtual Stanford Research Systems SR830 LIA instrument."""
 
     def __init__(self) -> None:
@@ -1053,7 +1054,7 @@ class sr830(_Settings):
         offset : float
             Offset in %, -105.00 =< offset =< 105.00.
         expand : OutputExpansion or int
-            Expansion factor; OutputExpansion.x_1 has code 0:
+            Expansion factor; OutputExpansion.x1 has code 0:
 
                 * 0 : 1 (no expansion)
                 * 1 : 10
@@ -1101,7 +1102,7 @@ class sr830(_Settings):
         offset : float
             Offset in %, -105.00 =< offset =< 105.00.
         expand : {0, 1, 2}
-            Expansion factor; OutputExpansion.x_1 has code 0:
+            Expansion factor; OutputExpansion.x1 has code 0:
 
                 * 0 : 1 (no expansion)
                 * 1 : 10
@@ -1956,7 +1957,7 @@ class sr830(_Settings):
         """
         _validate_register_bit(register, bit)
         _validate_register_value(register, value, decimal)
-        if register in (registers := self._enable_register_cmd_dict.keys()):
+        if register in (registers := _ENABLE_REGISTER_COMMANDS.keys()):
             # TODO: make dummy variables
             pass
         else:
@@ -1986,7 +1987,7 @@ class sr830(_Settings):
             Status-register simulation is not implemented.
         """
         _validate_register_bit(register, bit)
-        if register in (registers := self._enable_register_cmd_dict.keys()):
+        if register in (registers := _ENABLE_REGISTER_COMMANDS.keys()):
             # TODO: make dummy variables
             pass
         else:
@@ -2018,7 +2019,7 @@ class sr830(_Settings):
             Status byte value.
         """
         _validate_register_bit(status_byte, bit)
-        if status_byte in (status_bytes := self._status_byte_cmd_dict.keys()):
+        if status_byte in (status_bytes := _STATUS_REGISTER_COMMANDS.keys()):
             # TODO: make dummy variables
             pass
         else:

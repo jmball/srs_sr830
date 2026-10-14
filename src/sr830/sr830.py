@@ -58,7 +58,8 @@ from .settings import (
     SynchronousFilter,
     TimeConstant,
     TriggerStartMode,
-    _Settings,
+    _ENABLE_REGISTER_COMMANDS,
+    _STATUS_REGISTER_COMMANDS,
     _validate_enum,
     _validate_register_bit,
     _validate_register_value,
@@ -71,7 +72,7 @@ logger.addHandler(logging.NullHandler())
 _NOT_CONNECTED_MESSAGE = "Instrument is not connected."
 
 
-class sr830(_Settings):
+class sr830:
     """Stanford Research Systems SR830 LIA instrument.
 
     Use connect() to open a VISA connection and disconnect() to close it.
@@ -193,7 +194,7 @@ class sr830(_Settings):
         logger.debug(
             "Opening SR830 resource %s with %s output",
             resource_name,
-            self.output_interfaces[interface],
+            OutputInterface(interface).name,
         )
         resource = manager.open_resource(resource_name, **opening_kwargs)
         try:
@@ -204,7 +205,7 @@ class sr830(_Settings):
                     raise ValueError(f"{key!r} is not a valid VISA resource attribute.")
                 setattr(resource, key, value)
             resource.write(f"OUTX {interface}")
-            for command in self._enable_register_cmd_dict.values():
+            for command in _ENABLE_REGISTER_COMMANDS.values():
                 resource.write(f"{command} 255")
         except BaseException:
             # Preserve the initialization error even if close also fails.
@@ -258,35 +259,44 @@ class sr830(_Settings):
         Reading the error, LIA, and standard-event status registers clears their
         latched bits. The caller decides how to report the returned errors.
         """
-        sp = format(self.get_status_byte("serial_poll"), "08b")[::-1]
-        errors = []
-
-        # check if the interface output buffer is non-empty
-        if sp[4] == "1":
-            errors.append(self._serial_poll_status_byte[4][1])
-
-        # if any bits in error status byte are enabled check if they constitute an error
-        if sp[2] == "1":
-            esb = format(self.get_status_byte("error"), "08b")[::-1]
-            for i, bit in enumerate(esb):
-                if bit == "1":
-                    errors.append(self._error_status_byte[i][1])
-
-        # if any bits in LIA status byte are enabled check if they constitute an error
-        if sp[3] == "1":
-            lsb = format(self.get_status_byte("lia_status"), "08b")[::-1]
-            for i, bit in enumerate(lsb[:4]):
-                if bit == "1":
-                    errors.append(self._lia_status_byte[i][1])
-
-        # if any bits in standard event status byte are enabled check if they
-        # constitute an error
-        if sp[5] == "1":
-            sesb = format(self.get_status_byte("standard_event"), "08b")[::-1]
-            sesb_error_bits = [0, 2, 4, 5]
-            for i in sesb_error_bits:
-                if sesb[i] == "1":
-                    errors.append(self._standard_event_status_byte[i][1])
+        status = SerialPollFlag(self.get_status_byte(StatusRegister.SERIAL_POLL))
+        errors: list[str] = []
+        if status & SerialPollFlag.MESSAGE_AVAILABLE:
+            errors.append("Interface output buffer is non-empty")
+        if status & SerialPollFlag.ERROR:
+            error_status = ErrorFlag(self.get_status_byte(StatusRegister.ERROR))
+            for flag, message in (
+                (ErrorFlag.BACKUP_ERROR, "Battery backup has failed"),
+                (ErrorFlag.RAM_ERROR, "RAM memory test found error"),
+                (ErrorFlag.ROM_ERROR, "ROM memory test found error"),
+                (ErrorFlag.GPIB_ERROR, "GPIB fast data transfer mode aborted"),
+                (ErrorFlag.DSP_ERROR, "DSP test found error"),
+                (ErrorFlag.MATH_ERROR, "Internal math error"),
+            ):
+                if error_status & flag:
+                    errors.append(message)
+        if status & SerialPollFlag.LIA_STATUS:
+            lia_status = LiaStatusFlag(self.get_status_byte(StatusRegister.LIA_STATUS))
+            for lia_flag, message in (
+                (LiaStatusFlag.INPUT_OVERLOAD, "Input or amplifier overload"),
+                (LiaStatusFlag.FILTER_OVERLOAD, "Time constant filter overload"),
+                (LiaStatusFlag.OUTPUT_OVERLOAD, "Output overload"),
+                (LiaStatusFlag.REFERENCE_UNLOCK, "Reference unlock detected"),
+            ):
+                if lia_status & lia_flag:
+                    errors.append(message)
+        if status & SerialPollFlag.STANDARD_EVENT:
+            event_status = StandardEventFlag(
+                self.get_status_byte(StatusRegister.STANDARD_EVENT)
+            )
+            for event_flag, message in (
+                (StandardEventFlag.INPUT_QUEUE_OVERFLOW, "Input queue overflow"),
+                (StandardEventFlag.OUTPUT_QUEUE_OVERFLOW, "Output queue overflow"),
+                (StandardEventFlag.EXECUTION_ERROR, "Command cannot execute/parameter out of range"),
+                (StandardEventFlag.COMMAND_ERROR, "Received illegal command"),
+            ):
+                if event_status & event_flag:
+                    errors.append(message)
 
         return errors
 
@@ -1158,7 +1168,7 @@ class sr830(_Settings):
         offset : float
             Offset in %, -105.00 =< offset =< 105.00.
         expand : OutputExpansion or int
-            Expansion factor; OutputExpansion.x_1 has code 0:
+            Expansion factor; OutputExpansion.x1 has code 0:
 
                 * 0 : 1 (no expansion)
                 * 1 : 10
@@ -1198,7 +1208,7 @@ class sr830(_Settings):
         offset : float
             Offset in %, -105.00 =< offset =< 105.00.
         expand : {0, 1, 2}
-            Expansion factor; OutputExpansion.x_1 has code 0:
+            Expansion factor; OutputExpansion.x1 has code 0:
 
                 * 0 : 1 (no expansion)
                 * 1 : 10
@@ -1757,8 +1767,8 @@ class sr830(_Settings):
             and (bins in range(1, 16384))
         ):
             # pause storage if loop mode
-            buffer_mode = self.end_of_buffer_modes[self.end_of_buffer_mode]
-            if buffer_mode == "Loop":
+            buffer_mode = self.end_of_buffer_mode
+            if buffer_mode == EndOfBufferMode.LOOP:
                 self.pause()
 
             buffer = self._query_ascii_values(f"TRCA? {int(channel)},{start_bin},{bins}")
@@ -1770,7 +1780,7 @@ class sr830(_Settings):
             result = tuple(float(x) for x in buffer)
 
             # restart loop storage if previously set
-            if buffer_mode == "Loop":
+            if buffer_mode == EndOfBufferMode.LOOP:
                 self.end_of_buffer_mode = 1
 
             return result
@@ -1822,23 +1832,22 @@ class sr830(_Settings):
             and (bins <= 16383)
         ):
             # determine how to read buffer over output interface
-            output_interface = self.output_interfaces[self.output_interface]
-            if output_interface == "RS232":
+            if self.output_interface == OutputInterface.RS232:
                 warnings.warn(
                     "SRS recommends not using binary transfers over serial interfaces.",
                     stacklevel=2,
                 )
 
             # pause storage if loop mode
-            buffer_mode = self.end_of_buffer_modes[self.end_of_buffer_mode]
-            if buffer_mode == "Loop":
+            buffer_mode = self.end_of_buffer_mode
+            if buffer_mode == EndOfBufferMode.LOOP:
                 self.pause()
 
             raw = self._read_buffer_bytes(f"TRCB? {int(channel)},{start_bin},{bins}", 4 * bins)
             buffer = struct.unpack(f"<{bins}f", raw)
 
             # restart loop storage if previously set
-            if buffer_mode == "Loop":
+            if buffer_mode == EndOfBufferMode.LOOP:
                 self.end_of_buffer_mode = 1
 
             return buffer
@@ -1890,16 +1899,15 @@ class sr830(_Settings):
             and (bins >= 1)
             and (bins <= 16383)
         ):
-            output_interface = self.output_interfaces[self.output_interface]
-            if output_interface == "RS232":
+            if self.output_interface == OutputInterface.RS232:
                 warnings.warn(
                     "SRS recommends not using binary transfers over serial interfaces.",
                     stacklevel=2,
                 )
 
             # pause storage if loop mode
-            buffer_mode = self.end_of_buffer_modes[self.end_of_buffer_mode]
-            if buffer_mode == "Loop":
+            buffer_mode = self.end_of_buffer_mode
+            if buffer_mode == EndOfBufferMode.LOOP:
                 self.pause()
 
             # Each bin is a little-endian mantissa/exponent pair of 16-bit words.
@@ -1915,7 +1923,7 @@ class sr830(_Settings):
             )
 
             # restart loop storage if previously set
-            if buffer_mode == "Loop":
+            if buffer_mode == EndOfBufferMode.LOOP:
                 self.end_of_buffer_mode = 1
 
             return result
@@ -2102,17 +2110,17 @@ class sr830(_Settings):
         """
         _validate_register_bit(register, bit)
         _validate_register_value(register, value, decimal)
-        if register in (registers := self._enable_register_cmd_dict.keys()):
+        if register in (registers := _ENABLE_REGISTER_COMMANDS.keys()):
             if decimal is True:
                 if (value >= 0) & (value <= 255):
-                    cmd = f"{self._enable_register_cmd_dict[register]} {int(value)}"
+                    cmd = f"{_ENABLE_REGISTER_COMMANDS[register]} {int(value)}"
                 else:
                     raise ValueError(
                         f"Invalid value: {value}. Must be in range 0 - 255 if decimal."
                     )
             else:
                 if bit is not None and 0 <= bit <= 7 and value in (0, 1):
-                    cmd = f"{self._enable_register_cmd_dict[register]} {int(bit)},{int(value)}"
+                    cmd = f"{_ENABLE_REGISTER_COMMANDS[register]} {int(bit)},{int(value)}"
                 else:
                     raise ValueError(
                         f"Invalud bit or value: {bit} or {value}. Bit must in range"
@@ -2146,12 +2154,12 @@ class sr830(_Settings):
             Register value.
         """
         _validate_register_bit(register, bit)
-        if register in (registers := self._enable_register_cmd_dict.keys()):
+        if register in (registers := _ENABLE_REGISTER_COMMANDS.keys()):
             if bit is None:
-                cmd = f"{self._enable_register_cmd_dict[register]}?"
+                cmd = f"{_ENABLE_REGISTER_COMMANDS[register]}?"
             else:
                 if (bit >= 0) & (bit <= 7):
-                    cmd = f"{self._enable_register_cmd_dict[register]}? {int(bit)}"
+                    cmd = f"{_ENABLE_REGISTER_COMMANDS[register]}? {int(bit)}"
                 else:
                     raise ValueError(
                         f"{bit} is out of range. Bit must be in range 0-7 if specified."
@@ -2186,12 +2194,12 @@ class sr830(_Settings):
             Status byte value.
         """
         _validate_register_bit(status_byte, bit)
-        if status_byte in (status_bytes := self._status_byte_cmd_dict.keys()):
+        if status_byte in (status_bytes := _STATUS_REGISTER_COMMANDS.keys()):
             if bit is None:
-                cmd = f"{self._status_byte_cmd_dict[status_byte]}"
+                cmd = f"{_STATUS_REGISTER_COMMANDS[status_byte]}"
             else:
                 if (bit >= 0) & (bit <= 7):
-                    cmd = f"{self._status_byte_cmd_dict[status_byte]} {int(bit)}"
+                    cmd = f"{_STATUS_REGISTER_COMMANDS[status_byte]} {int(bit)}"
                 else:
                     raise ValueError(
                         f"{bit} is out of range. Bit must be in range 0-7 if specified."

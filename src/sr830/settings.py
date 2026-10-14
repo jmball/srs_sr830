@@ -1,13 +1,12 @@
-"""Shared SR830 command codes and immutable setting tables.
+"""SR830 setting enums and internal protocol helpers.
 
-Tuple indices are instrument command codes. Sensitivity values are in volts for
-voltage inputs and microamps for current inputs; time constants are in seconds.
-The sample rate table is in Hz, with the final entry selecting triggered sampling.
+Integer enum values are instrument command codes, not physical values.
+Unit-valued settings use <unit>_<value>; multiplier settings use x<value>.
+SI prefixes in numbers use n (nano), u (micro), and m (milli).
 """
 from collections.abc import Mapping
 from enum import Enum, IntEnum, IntFlag
 from types import MappingProxyType
-from typing import ClassVar
 
 
 class ReferenceSource(IntEnum):
@@ -26,7 +25,12 @@ class ReferenceTrigger(IntEnum):
 
 
 class InputConfiguration(IntEnum):
-    """Voltage or current input configuration (ISRC)."""
+    """Input configuration (ISRC).
+
+    A selects voltage input A; A_MINUS_B selects differential voltage input.
+    CURRENT_1_MOHM and CURRENT_100_MOHM select current input with 1 or
+    100 megohm transimpedance gain respectively.
+    """
 
     A = 0
     A_MINUS_B = 1
@@ -58,7 +62,7 @@ class LineNotchFilter(IntEnum):
 
 
 class ReserveMode(IntEnum):
-    """Dynamic reserve mode (RMOD)."""
+    """Dynamic reserve mode (RMOD): high reserve, normal, or low noise."""
 
     HIGH_RESERVE = 0
     NORMAL = 1
@@ -66,7 +70,11 @@ class ReserveMode(IntEnum):
 
 
 class SynchronousFilter(IntEnum):
-    """Synchronous filter state (SYNC)."""
+    """Synchronous filter state (SYNC).
+
+    OFF disables the filter. BELOW_200_HZ enables it when the detection
+    frequency (reference frequency times harmonic) is below 200 Hz.
+    """
 
     OFF = 0
     BELOW_200_HZ = 1
@@ -109,7 +117,11 @@ class Channel2Ratio(IntEnum):
 
 
 class FrontPanelOutputSource(IntEnum):
-    """Display or X (channel 1)/Y (channel 2) output (FPOP)."""
+    """Front-panel output source (FPOP).
+
+    DISPLAY selects the channel's displayed quantity. COMPONENT selects X
+    for channel 1 and Y for channel 2.
+    """
 
     DISPLAY = 0
     COMPONENT = 1
@@ -144,7 +156,12 @@ class TriggerStartMode(IntEnum):
 
 
 class DataTransferMode(IntEnum):
-    """GPIB fast transfer mode (FAST)."""
+    """GPIB fast transfer mode (FAST).
+
+    OFF disables transfer. DOS selects dedicated collection; WINDOWS selects
+    buffered transfer for hosts that may be interrupted. These are instrument
+    mode names and do not restrict the operating system running the driver.
+    """
 
     OFF = 0
     DOS = 1
@@ -152,7 +169,11 @@ class DataTransferMode(IntEnum):
 
 
 class LocalMode(IntEnum):
-    """Local, remote, or front-panel lockout mode (LOCL)."""
+    """Local, remote, or front-panel lockout mode (LOCL).
+
+    LOCAL enables front-panel control, REMOTE permits return via the Local
+    key, and LOCAL_LOCKOUT disables that key. The caller selects this mode.
+    """
 
     LOCAL = 0
     REMOTE = 1
@@ -160,7 +181,11 @@ class LocalMode(IntEnum):
 
 
 class GpibOverrideRemote(IntEnum):
-    """GPIB remote override state (OVRM)."""
+    """GPIB remote override state (OVRM).
+
+    ENABLED keeps the front panel usable despite GPIB remote control;
+    DISABLED restores normal GPIB remote behavior.
+    """
 
     DISABLED = 0
     ENABLED = 1
@@ -205,7 +230,13 @@ class Sensitivity(IntEnum):
 
 
 class TimeConstant(IntEnum):
-    """OFLT codes named by time unit and number, e.g. ``ms_100`` (100 ms)."""
+    """Time-constant codes (OFLT), named <unit>_<value>.
+
+    Units are us (microseconds), ms (milliseconds), s (seconds), and ks
+    (kiloseconds). For example, ms_100 means 100 ms; its command code is 8.
+    The instrument may restrict the selected time constant based on detection
+    frequency, filter slope, and dynamic reserve.
+    """
 
     us_10 = 0
     us_30 = 1
@@ -230,24 +261,37 @@ class TimeConstant(IntEnum):
 
 
 class LowPassFilterSlope(IntEnum):
-    """OFSL codes named by slope in dB per octave."""
+    """Filter-slope codes (OFSL), named dB_<value>.
 
-    DB_6 = 0
-    DB_12 = 1
-    DB_18 = 2
-    DB_24 = 3
+    dB_6, dB_12, dB_18, and dB_24 select slopes of 6, 12, 18, and 24
+    decibels per octave respectively. Their command codes are 0 through 3.
+    """
+
+    dB_6 = 0
+    dB_12 = 1
+    dB_18 = 2
+    dB_24 = 3
 
 
 class OutputExpansion(IntEnum):
-    """OEXP codes: code 0 means unity gain, not zero gain."""
+    """Output-expansion codes (OEXP), named x<value>.
 
-    x_1 = 0
-    x_10 = 1
-    x_100 = 2
+    x1, x10, and x100 select expansion factors of 1, 10, and 100.
+    Code 0 means no expansion (unity gain); it does not mean zero gain.
+    """
+
+    x1 = 0
+    x10 = 1
+    x100 = 2
 
 
 class SampleRate(IntEnum):
-    """SRAT codes named by frequency unit and number, or external trigger mode."""
+    """Sample-rate codes (SRAT), named <unit>_<value>.
+
+    Hz means hertz and mHz means millihertz. An underscore replaces the
+    decimal point in mHz_62_5 (62.5 mHz). TRIGGER selects sampling on each
+    trigger rather than a periodic rate. Values are command codes 0 to 14.
+    """
 
     mHz_62_5 = 0
     mHz_125 = 1
@@ -316,7 +360,14 @@ class StatusRegister(str, Enum):
 
 
 class StandardEventBit(IntEnum):
-    """StandardEvent register bit positions for the ``bit=`` argument."""
+    """Standard-event register bit positions for the ``bit=`` argument.
+
+    INPUT_QUEUE_OVERFLOW and OUTPUT_QUEUE_OVERFLOW report queue errors.
+    EXECUTION_ERROR reports a command that cannot execute or an invalid
+    parameter; COMMAND_ERROR reports an illegal command. USER_REQUEST
+    reports a key/knob action and POWER_ON reports power-up. Bits 1 and 3
+    are unused.
+    """
 
     INPUT_QUEUE_OVERFLOW = 0
     OUTPUT_QUEUE_OVERFLOW = 2
@@ -327,7 +378,11 @@ class StandardEventBit(IntEnum):
 
 
 class StandardEventFlag(IntFlag):
-    """StandardEvent register masks for whole-byte values; combine with ``|``."""
+    """StandardEvent register masks for whole-byte values; combine with ``|``.
+
+    Member meanings are documented in StandardEventBit. Each mask is 1 shifted
+    by the corresponding bit position; NONE means no bits are set.
+    """
 
     NONE = 0
     INPUT_QUEUE_OVERFLOW = 1 << 0
@@ -339,7 +394,13 @@ class StandardEventFlag(IntFlag):
 
 
 class SerialPollBit(IntEnum):
-    """SerialPoll register bit positions for the ``bit=`` argument."""
+    """Serial-poll register bit positions for the ``bit=`` argument.
+
+    Bits 0 and 1 indicate no scan and no command execution in progress.
+    ERROR, LIA_STATUS, and STANDARD_EVENT summarize enabled register events;
+    MESSAGE_AVAILABLE indicates queued output and SERVICE_REQUEST indicates
+    a service request. Bit 7 is unused.
+    """
 
     NO_SCAN_IN_PROGRESS = 0
     NO_COMMAND_IN_PROGRESS = 1
@@ -351,7 +412,11 @@ class SerialPollBit(IntEnum):
 
 
 class SerialPollFlag(IntFlag):
-    """SerialPoll register masks for whole-byte values; combine with ``|``."""
+    """SerialPoll register masks for whole-byte values; combine with ``|``.
+
+    Member meanings are documented in SerialPollBit. Each mask is 1 shifted
+    by the corresponding bit position; NONE means no bits are set.
+    """
 
     NONE = 0
     NO_SCAN_IN_PROGRESS = 1 << 0
@@ -364,7 +429,13 @@ class SerialPollFlag(IntFlag):
 
 
 class ErrorBit(IntEnum):
-    """Error register bit positions for the ``bit=`` argument."""
+    """Error-register bit positions for the ``bit=`` argument.
+
+    BACKUP_ERROR reports failed battery backup; RAM_ERROR, ROM_ERROR, and
+    DSP_ERROR report failed memory/processor tests. GPIB_ERROR reports an
+    aborted fast transfer and MATH_ERROR an internal calculation error.
+    Bits 0 and 3 are unused.
+    """
 
     BACKUP_ERROR = 1
     RAM_ERROR = 2
@@ -375,7 +446,11 @@ class ErrorBit(IntEnum):
 
 
 class ErrorFlag(IntFlag):
-    """Error register masks for whole-byte values; combine with ``|``."""
+    """Error register masks for whole-byte values; combine with ``|``.
+
+    Member meanings are documented in ErrorBit. Each mask is 1 shifted
+    by the corresponding bit position; NONE means no bits are set.
+    """
 
     NONE = 0
     BACKUP_ERROR = 1 << 1
@@ -387,7 +462,13 @@ class ErrorFlag(IntFlag):
 
 
 class LiaStatusBit(IntEnum):
-    """LiaStatus register bit positions for the ``bit=`` argument."""
+    """LIA-status register bit positions for the ``bit=`` argument.
+
+    The first three bits report input/reserve, filter, and output overload.
+    REFERENCE_UNLOCK reports lost reference lock; FREQUENCY_RANGE_CHANGED
+    and TIME_CONSTANT_CHANGED report indirect setting changes; TRIGGER
+    reports triggered data storage. Bit 7 is unused.
+    """
 
     INPUT_OVERLOAD = 0
     FILTER_OVERLOAD = 1
@@ -399,7 +480,11 @@ class LiaStatusBit(IntEnum):
 
 
 class LiaStatusFlag(IntFlag):
-    """LiaStatus register masks for whole-byte values; combine with ``|``."""
+    """LiaStatus register masks for whole-byte values; combine with ``|``.
+
+    Member meanings are documented in LiaStatusBit. Each mask is 1 shifted
+    by the corresponding bit position; NONE means no bits are set.
+    """
 
     NONE = 0
     INPUT_OVERLOAD = 1 << 0
@@ -409,6 +494,21 @@ class LiaStatusFlag(IntFlag):
     FREQUENCY_RANGE_CHANGED = 1 << 4
     TIME_CONSTANT_CHANGED = 1 << 5
     TRIGGER = 1 << 6
+
+
+_ENABLE_REGISTER_COMMANDS: Mapping[str, str] = MappingProxyType({
+    "standard_event": "*ESE",
+    "serial_poll": "*SRE",
+    "error": "ERRE",
+    "lia_status": "LIAE",
+})
+
+_STATUS_REGISTER_COMMANDS: Mapping[str, str] = MappingProxyType({
+    "standard_event": "*ESR?",
+    "serial_poll": "*STB?",
+    "error": "ERRS?",
+    "lia_status": "LIAS?",
+})
 
 
 # Positions and masks have distinct types to prevent confusing bit 2 with mask 4.
@@ -444,242 +544,3 @@ def _validate_register_value(register: str, value: object, decimal: bool) -> Non
     _validate_enum(register, StatusRegister)
     if register in _REGISTER_FLAGS:
         _validate_enum(value, _REGISTER_FLAGS[register] if decimal else SwitchState)
-
-
-class _Settings:
-    """Model constants inherited by the hardware and virtual drivers."""
-
-    # Public tables retain the original attribute names and tuple values.
-
-    reference_sources: ClassVar[tuple[str, ...]] = ("external", "internal")
-
-    triggers: ClassVar[tuple[str, ...]] = (
-        'zero crossing',
-        'TTL rising egde',
-        'TTL falling edge',
-    )
-
-    input_configurations: ClassVar[tuple[str, ...]] = ("A", "A-B", "I (1 MOhm)", "I (100 MOhm)")
-
-    groundings: ClassVar[tuple[str, ...]] = ("Float", "Ground")
-
-    input_couplings: ClassVar[tuple[str, ...]] = ("AC", "DC")
-
-    input_line_notch_filter_statuses: ClassVar[tuple[str, ...]] = (
-        "no filters",
-        "Line notch in",
-        "2 x Line notch in",
-        "Both notch filters in",
-    )
-
-    # Values are V for voltage inputs and microamps for current inputs.
-    sensitivities: ClassVar[tuple[float, ...]] = (
-        2e-9,
-        5e-9,
-        10e-9,
-        20e-9,
-        50e-9,
-        100e-9,
-        200e-9,
-        500e-9,
-        1e-6,
-        2e-6,
-        5e-6,
-        10e-6,
-        20e-6,
-        50e-6,
-        100e-6,
-        200e-6,
-        500e-6,
-        1e-3,
-        2e-3,
-        5e-3,
-        10e-3,
-        20e-3,
-        50e-3,
-        100e-3,
-        200e-3,
-        500e-3,
-        1.0,
-    )
-
-    reserve_modes: ClassVar[tuple[str, ...]] = ("High reserve", "Normal", "Low noise")
-
-    # Values are seconds; setters still take integer table indices.
-    time_constants: ClassVar[tuple[float, ...]] = (
-        10e-6,
-        30e-6,
-        100e-6,
-        300e-6,
-        1e-3,
-        3e-3,
-        10e-3,
-        30e-3,
-        100e-3,
-        300e-3,
-        1.0,
-        3.0,
-        10.0,
-        30.0,
-        100.0,
-        300.0,
-        1e3,
-        3e3,
-        10e3,
-        30e3,
-    )
-
-    low_pass_filter_slopes: ClassVar[tuple[int, ...]] = (6, 12, 18, 24)
-
-    synchronous_filter_statuses: ClassVar[tuple[str, ...]] = ("Off", "below 200 Hz")
-
-    display_ch1: ClassVar[tuple[str, ...]] = ("X", "R", "X Noise", "Aux In 1", "Aux In 2")
-
-    display_ch2: ClassVar[tuple[str, ...]] = ("Y", "Phase", "Y Noise", "Aux In 3", "Aux In 4")
-
-    ratio_ch1: ClassVar[tuple[str, ...]] = ("none", "Aux In 1", "Aux In 2")
-
-    ratio_ch2: ClassVar[tuple[str, ...]] = ("none", "Aux In 3", "Aux In 4")
-
-    front_panel_output_sources_ch1: ClassVar[tuple[str, ...]] = ("CH1 display", "X")
-
-    front_panel_output_sources_ch2: ClassVar[tuple[str, ...]] = ("CH2 display", "Y")
-
-    expands: ClassVar[tuple[int, ...]] = (0, 10, 100)
-
-    output_interfaces: ClassVar[tuple[str, ...]] = ("RS232", "GPIB")
-
-    key_click_states: ClassVar[tuple[str, ...]] = ("Off", "On")
-
-    alarm_statuses: ClassVar[tuple[str, ...]] = ("Off", "On")
-
-    sample_rates: ClassVar[tuple[float | str, ...]] = (
-        62.5e-3,
-        125e-3,
-        250e-3,
-        500e-3,
-        1,
-        2,
-        4,
-        8,
-        16,
-        32,
-        64,
-        128,
-        256,
-        512,
-        "Trigger",
-    )
-
-    end_of_buffer_modes: ClassVar[tuple[str, ...]] = ("1 Shot", "Loop")
-
-    trigger_start_modes: ClassVar[tuple[str, ...]] = ("Off", "Start scan")
-
-    data_transfer_modes: ClassVar[tuple[str, ...]] = ("Off", "On (DOS)", "On (Windows)")
-
-    local_modes: ClassVar[tuple[str, ...]] = ("Local", "Remote", "Local lockout")
-
-    gpib_override_remote_conditions: ClassVar[tuple[str, ...]] = ("No", "Yes")
-
-    # --- private class variables ---
-
-    _enable_register_cmd_dict: ClassVar[Mapping[str, str]] = MappingProxyType({
-        "standard_event": "*ESE",
-        "serial_poll": "*SRE",
-        "error": "ERRE",
-        "lia_status": "LIAE",
-    })
-
-    _status_byte_cmd_dict: ClassVar[Mapping[str, str]] = MappingProxyType({
-        "standard_event": "*ESR?",
-        "serial_poll": "*STB?",
-        "error": "ERRS?",
-        "lia_status": "LIAS?",
-    })
-
-    # Meaning of status bits. Outer tuple indices are bit numbers.
-    # Inner tuple indices select the description of an event or state.
-    _serial_poll_status_bit_names: ClassVar[tuple[str, ...]] = (
-        "SCN",
-        "IFC",
-        "ERR",
-        "LIA",
-        "MAV",
-        "ESB",
-        "SRQ",
-        "Unused",
-    )
-    _serial_poll_status_byte: ClassVar[tuple[tuple[str, str], ...]] = (
-        ('', 'No scan in progress'),
-        ('', 'No command execution in progress'),
-        ('', 'An enabled bit in error status byte has been set'),
-        ('', 'An enabled bit in LIA status byte has been set'),
-        ('', 'Interface output buffer is non-empty'),
-        ('', 'An enabled bit in standard status byte has been set'),
-        ('', 'A service request has occured'),
-        ('', ''),
-    )
-
-    _standard_event_status_bit_names: ClassVar[tuple[str, ...]] = (
-        "INP",
-        "Unused",
-        "QRY",
-        "Unused",
-        "EXE",
-        "CMD",
-        "URQ",
-        "PON",
-    )
-    _standard_event_status_byte: ClassVar[tuple[tuple[str, str], ...]] = (
-        ('', 'Input queue overflow'),
-        ('', ''),
-        ('', 'Output queue overflow'),
-        ('', ''),
-        ('', 'Command cannot execute/parameter out of range'),
-        ('', 'Received illegal command'),
-        ('', 'Key pressed/knob rotated'),
-        ('', 'Power-on'),
-    )
-
-    _lia_status_bit_names: ClassVar[tuple[str, ...]] = (
-        "INPUT/RESRV",
-        "FILTR",
-        "OUTPUT",
-        "UNLK",
-        "RANGE",
-        "TC",
-        "TRIG",
-        "Unused",
-    )
-    _lia_status_byte: ClassVar[tuple[tuple[str, str], ...]] = (
-        ('', 'Input or amplifier overload'),
-        ('', 'Time constant filter overload'),
-        ('', 'Output overload'),
-        ('', 'Reference unlock detected'),
-        ('', 'Detection frequency switched range'),
-        ('', 'Time constant changed indirectly'),
-        ('', 'Data storage triggered'),
-        ('', ''),
-    )
-
-    _error_status_bit_names: ClassVar[tuple[str, ...]] = (
-        "Unused",
-        "Backup error",
-        "RAM error",
-        "Unused",
-        "ROM error",
-        "GPIB error",
-        "DSP error",
-        "Math error",
-    )
-    _error_status_byte: ClassVar[tuple[tuple[str, str], ...]] = (
-        ('', ''),
-        ('', 'Battery backup has failed'),
-        ('', 'RAM memory test found error'),
-        ('', ''),
-        ('', 'ROM memory test found error'),
-        ('', 'GPIB fast data transfer mode aborted'),
-        ('', 'DSP test found error'),
-        ('', 'Internal math error'),
-    )
-

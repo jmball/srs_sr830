@@ -83,7 +83,7 @@ Both packages ship inline type hints. `measure_multiple()` returns an iterator
 of floats; buffer readers return tuples. The virtual status-register getters
 remain unimplemented and return `None`.
 
-## Named settings and value tables
+## Named settings
 
 Discrete settings accept their named enums or the existing integer codes. Enum
 values are instrument command codes, not physical values. Getters continue to
@@ -100,13 +100,16 @@ with sr830() as instrument:
     instrument.connect("ASRL2::INSTR")
     instrument.sensitivity = Sensitivity.x1u
     instrument.time_constant = TimeConstant.ms_100
-    instrument.lowpass_filter_slope = LowPassFilterSlope.DB_12
+    instrument.lowpass_filter_slope = LowPassFilterSlope.dB_12
     instrument.sample_rate = SampleRate.Hz_512
 
     selected = Sensitivity(instrument.sensitivity)
-    full_scale = instrument.sensitivities[selected]
-    # full_scale is 1e-6 V in voltage mode, or 1e-6 microamps in current mode.
+    # selected is Sensitivity.x1u: full scale is 1 microvolt or 1 picoamp.
 ```
+
+Unit-valued settings use `<unit>_<value>` (for example, `ms_100`, `dB_12`,
+and `Hz_512`). Multiplier settings use `x<value>` (for example, `x10` and
+`x1u`). An underscore replaces a decimal point in `SampleRate.mHz_62_5`.
 
 Sensitivity names use `x<number><SI prefix>`, with `u` for micro. The `x`
 indicates a full-scale amplitude multiplier applied to V for voltage inputs or
@@ -119,8 +122,8 @@ multiplier (1 V or 1 microamp).
 | `Sensitivity` | `x200m` | 24 | 200 millivolts or 200 nanoamps full scale |
 | `Sensitivity` | `x1` | 26 | 1 volt or 1 microamp full scale |
 | `TimeConstant` | `ms_100` | 8 | 100 milliseconds |
-| `LowPassFilterSlope` | `DB_12` | 1 | 12 dB/octave |
-| `OutputExpansion` | `x_1`, `x_10`, `x_100` | 0, 1, 2 | Output expansion factors |
+| `LowPassFilterSlope` | `dB_12` | 1 | 12 dB/octave |
+| `OutputExpansion` | `x1`, `x10`, `x100` | 0, 1, 2 | Output expansion factors |
 | `SampleRate` | `mHz_62_5`, `Hz_512`, `TRIGGER` | 0, 13, 14 | Rate in Hz or triggered sampling |
 
 The enum types are defined in `sr830.settings` and exported by both `sr830` and
@@ -142,7 +145,7 @@ from sr830 import (
 )
 
 instrument.set_display(Channel.CH1, Channel1Display.R, Channel1Ratio.NONE)
-instrument.set_output_offset_expand(OutputParameter.R, 0.0, OutputExpansion.x_10)
+instrument.set_output_offset_expand(OutputParameter.R, 0.0, OutputExpansion.x10)
 values = tuple(instrument.measure_multiple([
     MeasurementParameter.X, MeasurementParameter.Y,
 ]))
@@ -172,15 +175,11 @@ The four position/mask pairs are `StandardEventBit`/`StandardEventFlag`,
 `LiaStatusBit`/`LiaStatusFlag`. Virtual register getters remain unimplemented
 and return `None`.
 
-Both drivers inherit one shared set of `ClassVar` tables. Existing names,
-indices, labels, and numeric values are preserved; the table contents are
-immutable. Numeric quantities remain tuples: `time_constants` contains seconds,
-`low_pass_filter_slopes` contains dB/octave, and `sample_rates` contains Hz plus
-the final `"Trigger"` entry. `sensitivities` contains volts for voltage inputs
-and microamps for current inputs: index `0` represents 2 nV or 2 fA, and index
-`26` represents 1 V or 1 µA. The legacy `expands[0]` value of `0` denotes no
-expansion (gain 1). Setters still accept table indices rather than physical
-quantities. See the [SR830 programming manual](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf)
+The enums are the public representation of discrete settings; legacy value
+and description tables have been removed. Member meanings, physical units,
+and instrument command codes are documented in their enum docstrings.
+Setters accept enum members or integer command codes, not physical values.
+See the [SR830 programming manual](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf)
 for instrument codes and units.
 
 ## Logging and warnings

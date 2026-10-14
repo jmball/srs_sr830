@@ -2,6 +2,7 @@
 
 from enum import IntEnum, IntFlag
 import inspect
+import struct
 import typing
 import unittest
 from unittest.mock import Mock, patch
@@ -15,10 +16,10 @@ from test_settings import PROPERTY_CODES
 
 
 NUMERIC_PROPERTIES = (
-    ('sensitivity', settings.Sensitivity, 'SENS', 'sensitivities'),
-    ('time_constant', settings.TimeConstant, 'OFLT', 'time_constants'),
-    ('lowpass_filter_slope', settings.LowPassFilterSlope, 'OFSL', 'low_pass_filter_slopes'),
-    ('sample_rate', settings.SampleRate, 'SRAT', 'sample_rates'),
+    ('sensitivity', settings.Sensitivity, 'SENS'),
+    ('time_constant', settings.TimeConstant, 'OFLT'),
+    ('lowpass_filter_slope', settings.LowPassFilterSlope, 'OFSL'),
+    ('sample_rate', settings.SampleRate, 'SRAT'),
 )
 REGISTER_TYPES = (
     (settings.StatusRegister.STANDARD_EVENT, settings.StandardEventBit, settings.StandardEventFlag, '*ESE', '*ESR?'),
@@ -42,37 +43,32 @@ class EnumTests(unittest.TestCase):
                     self.assertIs(getattr(sr830, name), enum)
                     self.assertIs(getattr(virtual_sr830, name), enum)
 
-    def test_numeric_names_codes_and_physical_tables(self):
+    def test_numeric_names_and_instrument_codes(self):
         self.assertEqual(settings.Sensitivity.x1u, 8)
         self.assertEqual(settings.Sensitivity.x200m, 24)
         self.assertEqual(settings.Sensitivity.x1, 26)
         self.assertIs(settings.Sensitivity(26), settings.Sensitivity.x1)
         self.assertIs(settings.Sensitivity.__members__['x1'], settings.Sensitivity.x1)
-        for name, enum, command, table in NUMERIC_PROPERTIES:
-            self.assertEqual([int(member) for member in enum], list(range(len(getattr(self.hardware, table)))))
-        for member in settings.Sensitivity:
-            self.assertTrue(member.name.startswith('x'))
-            prefix = member.name[-1] if member.name[-1].isalpha() else ''
-            number = member.name[1:-1] if prefix else member.name[1:]
-            multiplier = {'n': 1e-9, 'u': 1e-6, 'm': 1e-3, '': 1}[prefix]
-            self.assertAlmostEqual(self.hardware.sensitivities[member] / (int(number) * multiplier), 1)
-        for member in settings.TimeConstant:
-            unit, number = member.name.split('_')
-            multiplier = {'us': 1e-6, 'ms': 1e-3, 's': 1, 'ks': 1e3}[unit]
-            self.assertAlmostEqual(self.hardware.time_constants[member], int(number) * multiplier)
-        for member in settings.LowPassFilterSlope:
-            self.assertEqual(self.hardware.low_pass_filter_slopes[member], int(member.name.split('_')[1]))
-        for member in settings.SampleRate:
-            if member is settings.SampleRate.TRIGGER:
-                self.assertEqual(self.hardware.sample_rates[member], 'Trigger')
-            else:
-                unit, number = member.name.split('_', 1)
-                multiplier = 1e-3 if unit == 'mHz' else 1
-                self.assertEqual(self.hardware.sample_rates[member], float(number.replace('_', '.')) * multiplier)
+        for enum, count in (
+            (settings.Sensitivity, 27), (settings.TimeConstant, 20),
+            (settings.LowPassFilterSlope, 4), (settings.SampleRate, 15),
+        ):
+            self.assertEqual([int(member) for member in enum], list(range(count)))
+        self.assertEqual(settings.Sensitivity.x2n, 0)
+        self.assertEqual(settings.TimeConstant.us_10, 0)
+        self.assertEqual(settings.TimeConstant.ms_100, 8)
+        self.assertEqual(settings.TimeConstant.ks_30, 19)
+        self.assertEqual([member.name for member in settings.LowPassFilterSlope],
+                         ['dB_6', 'dB_12', 'dB_18', 'dB_24'])
+        self.assertEqual(settings.SampleRate.mHz_62_5, 0)
+        self.assertEqual(settings.SampleRate.Hz_512, 13)
+        self.assertEqual(settings.SampleRate.TRIGGER, 14)
+        self.assertEqual([member.name for member in settings.OutputExpansion],
+                         ['x1', 'x10', 'x100'])
 
     def test_every_property_enum_member_matches_integer_behavior(self):
         properties = [(name, type(code), command) for name, code, command in PROPERTY_CODES]
-        properties += [(name, enum, command) for name, enum, command, table in NUMERIC_PROPERTIES]
+        properties += [(name, enum, command) for name, enum, command in NUMERIC_PROPERTIES]
         for name, enum, command in properties:
             for member in enum:
                 for value in (member, int(member)):
@@ -88,7 +84,7 @@ class EnumTests(unittest.TestCase):
 
     def test_numeric_invalid_codes_and_wrong_enum_classes(self):
         for driver in (self.hardware, self.virtual):
-            for name, enum, command, table in NUMERIC_PROPERTIES:
+            for name, enum, command in NUMERIC_PROPERTIES:
                 for value in (-1, len(enum), settings.ReferenceSource.INTERNAL):
                     with self.subTest(name=name, value=value, driver=type(driver)):
                         with self.assertRaises(ValueError):
@@ -145,6 +141,27 @@ class EnumTests(unittest.TestCase):
         for channel in settings.Channel:
             self.assertEqual(self.hardware.get_ascii_buffer_data(channel, 0, 1), (1.5,))
             self.assertEqual(self.resource.query_ascii_values.call_args.args, (f'TRCA? {int(channel)},0,1',))
+
+    def test_loop_buffer_readers_use_enum_modes_without_legacy_tables(self):
+        readers = (
+            (self.hardware.get_ascii_buffer_data, 'TRCA?', None),
+            (self.hardware.get_binary_buffer_data, 'TRCB?', struct.pack('<f', 1.25)),
+            (self.hardware.get_non_norm_buffer_data, 'TRCL?', struct.pack('<hh', 10, 124)),
+        )
+        self.resource.read_termination = '\n'
+        for reader, command, raw in readers:
+            with self.subTest(reader=reader):
+                self.resource.write.reset_mock()
+                self.resource.query.side_effect = ['1'] if raw is None else ['1', '1']
+                self.resource.query_ascii_values.return_value = ['1.25', '']
+                self.resource.read_bytes.return_value = raw
+                result = reader(settings.Channel.CH2, 0, 1)
+                self.assertEqual(result, (10.0,) if command == 'TRCL?' else (1.25,))
+                commands = [call.args[0] for call in self.resource.write.call_args_list]
+                self.assertEqual(commands[0], 'PAUS')
+                self.assertEqual(commands[-1], 'SEND 1')
+                if raw is not None:
+                    self.assertIn(f'{command} 2,0,1', commands)
 
     def test_measurement_selectors_and_integer_serialization(self):
         self.resource.query.return_value = '1.25'
@@ -224,7 +241,7 @@ class EnumTests(unittest.TestCase):
 
     def test_annotations_expose_enum_inputs_and_integer_getters(self):
         for cls in (sr830.sr830, virtual_sr830.sr830):
-            for name, enum, command, table in NUMERIC_PROPERTIES:
+            for name, enum, command in NUMERIC_PROPERTIES:
                 setter_hints = typing.get_type_hints(getattr(cls, name).fset)
                 parameter = next(value for key, value in setter_hints.items() if key != 'return')
                 self.assertEqual(set(typing.get_args(parameter)), {enum, int})
