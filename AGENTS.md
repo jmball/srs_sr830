@@ -7,9 +7,10 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
 
 - `src/sr830/sr830.py`: hardware driver, VISA connection lifecycle, instrument
   settings, measurements, buffer transfers, and status registers.
-- `src/virtual_sr830/virtual_sr830.py`: in-memory implementation of the same
-  public interface, with dummy settings and measurement values. It is not a
-  complete simulation of the instrument or a VISA resource.
+- `src/virtual_sr830/virtual_sr830.py`: simulator inheriting the hardware public
+  interface, with connection/I/O adapters and simulation controls.
+- `src/virtual_sr830/_simulation.py`: stateful demodulated-signal model, filters,
+  acquisition, setups, protocol responses, and registers; opens no VISA resource.
 - Each package's `__init__.py` exports its implementation and obtains a version
   through `importlib.metadata` for the `srs_sr830` distribution, falling back to
   `0.0.0`.
@@ -46,7 +47,7 @@ The hardware class is `sr830.SR830`; the virtual class is
   indices, units, return types, and validation behavior unless the task requires
   an API change.
 - When changing a shared setting or method, inspect both implementations and
-  update the virtual instrument where appropriate. Keep its dummy defaults and
+  update the virtual instrument where appropriate. Keep its documented instrument defaults and
   validation consistent with the intended hardware interface.
 - Define enum codes only in `src/sr830/settings.py`; both packages export the
   same enums. Integer calls and getter return types remain supported. Enum
@@ -79,7 +80,7 @@ The hardware class is `sr830.SR830`; the virtual class is
 - No CI, formatter, or linter is configured. Both packages ship `py.typed`.
   Driver annotations can be checked with `uv run --locked mypy --strict --follow-imports=silent
   src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py
-  src/virtual_sr830/virtual_sr830.py` (included in the dev group).
+  src/virtual_sr830/virtual_sr830.py src/virtual_sr830/_simulation.py` (included in the dev group).
 
 ## Setup and validation
 
@@ -118,10 +119,10 @@ when tests fail. Supplying --resource-name selects real hardware; a connection
 failure must fail rather than silently fall back to virtual. Optional arguments
 include --visa-backend, --output-interface, --visa-timeout (ms), serial framing,
 and --acquisition-timeout (seconds). Spell the backend as --visa-backend=@py;
-pytest treats a standalone @py as an argument-file reference. Real buffer tests
-pause and clear acquisition buffers. Hardware-only status tests skip without a
-resource because virtual register getters are unimplemented. Verify fixture
-selection/cleanup with fake resources; do not claim virtual runs validate hardware.
+pytest treats a standalone @py as an argument-file reference. Buffer tests
+pause and clear acquisition buffers on both backends. Register tests also run
+on both backends. Verify fixture selection/cleanup with fake resources; do not
+claim virtual runs validate hardware.
 
 Real hardware runs require a user-provided VISA resource and appropriate
 authorization to change its settings. `connect()` never resets the instrument;
@@ -134,6 +135,25 @@ conflicting framing is rejected, and connecting twice raises. Disconnect clears
 because PyVISA shares them. The VISA resource retains its manager; the driver
 does not store a separate manager reference. Disconnect after hardware work;
 the hardware driver's context manager calls `disconnect()` on exit.
+
+## Acquisition and simulation conventions
+
+- Integer protocol fields reject floats (including 1.0) and bools before I/O.
+  Native serial connections require 8 data bits for all commands.
+- Trace readers validate capacity and acquired length, reject short responses,
+  and pause loop scans. They leave loop scans paused unless resume=True explicitly
+  requests start() after success. Failures leave the scan paused.
+- FAST transfers are GPIB-only, decoded as signed little-endian X/Y count pairs.
+  Guard text queries while streaming; stop/discard pending FAST output with VISA
+  clear before returning to text I/O. Preserve framing and timeout on failures.
+- Completion/settling helpers have finite timeout budgets. Settling estimates a
+  multiple of the low-pass time constant, not physical measurement stability.
+- Simulation tests use an injected clock and advance_time(), not real sleeps.
+  Keep physical units, phase, display offsets/ratios, buffer cadence, register
+  latching/clear-on-read, and setup copies consistent. Expand changes ordinary
+  display resolution rather than its amplitude; FAST counts and ratios include it.
+  The model accepts demodulated inputs, not raw electrical waveforms; document
+  analog scope honestly instead of claiming calibrated hardware equivalence.
 
 ## Development VM environment
 

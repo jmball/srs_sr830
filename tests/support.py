@@ -69,7 +69,8 @@ def open_instrument(options: InstrumentOptions) -> Iterator[SR830 | VirtualSR830
     """Use a virtual instrument by default; a requested VISA failure stays a failure."""
     if options.resource_name is None:
         with VirtualSR830() as virtual:
-            virtual.connect("ASRL1::INSTR", output_interface=options.output_interface)
+            virtual.connect("ASRL1::INSTR", output_interface=options.output_interface,
+                            **options.resource_kwargs())
             yield virtual
         return
 

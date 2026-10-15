@@ -6,9 +6,8 @@ uv run --locked pytest
 ```
 
 The default run opens no hardware. Unit tests use fake VISA resources; integration
-tests connect a fresh `VirtualSR830` for each test. Register tests skip because the
-virtual driver does not implement register state. A reported skip is distinct from
-a passing hardware check.
+tests connect a fresh `VirtualSR830` for each test, including registers and real
+simulated acquisition. No hardware is opened without an explicit resource.
 
 ## Layout
 
@@ -17,12 +16,14 @@ a passing hardware check.
 | `unit/test_connection.py` | Initialization, cleanup, reconnection, framing, and binary transfers |
 | `unit/test_settings.py` | Parametrized integer/enum codes, commands, and getter types |
 | `unit/test_enums.py` | Named selectors, enum validation, register masks, and buffer modes |
+| `unit/test_protocol_regressions.py` | Strict integer fields, transfer failures, explicit resume, FAST decoding, and timeout recovery |
+| `unit/test_simulation.py` | Deterministic filters, signals, setups, registers, acquisition, and streaming |
 | `unit/test_logging.py` | Library logging policy, warnings, and error decoding |
 | `unit/test_instrument_fixtures.py` | Backend selection, option forwarding, failures, and restoration with fake VISA |
 | `integration/test_settings.py` | Setting, display, expansion, and auxiliary-output round trips |
 | `integration/test_measurements.py` | Identification and finite public measurement results |
-| `integration/test_buffers.py` | Real acquisition/readout, or virtual dummy buffer reads |
-| `integration/test_status.py` | Hardware-only register masks and status reads |
+| `integration/test_buffers.py` | Acquisition/readout through the same hardware or virtual interface |
+| `integration/test_status.py` | Register masks and status reads on both backends |
 | `conftest.py` | CLI options and integration fixtures |
 | `unit/conftest.py` | Unit-test mocks |
 | `support.py`, `cases.py` | Shared helpers and test data |
@@ -43,7 +44,7 @@ uv sync --locked --extra serial
 ```
 
 ```sh
-# Serial settings must match the front panel. Binary reads require 8 data bits.
+# Serial settings must match the front panel. The SR830 always requires 8 data bits.
 uv run --locked --extra serial pytest tests/integration --resource-name "ASRL2::INSTR" \
     --visa-backend=@py --baud-rate 9600 --data-bits 8 --parity none --stop-bits 1
 
@@ -72,7 +73,7 @@ Unit tests keep using fake VISA resources even during a hardware run.
 | `--output-interface` | Instrument-side RS232 (0) or GPIB (1) | Infer for native ASRL/GPIB |
 | `--visa-timeout` | VISA I/O timeout in milliseconds | 5000 |
 | `--baud-rate` | Serial baud rate | VISA default |
-| `--data-bits` | Serial data bits: 5, 6, 7, or 8 | VISA default |
+| `--data-bits` | Serial data bits: 8 | Driver 8 |
 | `--parity` | none, odd, even, mark, or space | VISA default |
 | `--stop-bits` | 1, 1.5, or 2 | VISA default |
 | `--write-termination` | LF, CR, or CRLF | Driver LF |
@@ -90,9 +91,11 @@ status queries clear latched events, and disconnect returns the front panel to
 local mode. Buffer tests stop acquisition and erase the existing trace buffers;
 previous buffer contents and scan activity cannot be restored.
 
-The virtual driver supplies dummy measurements and buffers. A default passing run
-checks interface behavior, not calibrated measurement accuracy or real transport
-compatibility. Physical signal accuracy requires a known signal and a hardware run.
+The virtual driver models demodulated signals, settling, acquisition, registers,
+and saved setups. Unit simulation tests inject a fixed clock and advance time
+without sleeping; integration fixtures acquire actual simulated buffer points.
+See the [simulation guide](../README.md#simulation) for controls and physical scope.
+Physical signal accuracy and transport compatibility require a hardware run.
 
 ## Selection and coverage
 
@@ -103,7 +106,7 @@ uv run --locked pytest -m hardware --resource-name "GPIB0::8::INSTR"
 uv run --locked pytest --cov --cov-report=term-missing
 ```
 
-Without a resource, `hardware` selects only the skipped register tests. With a
-resource, all integration tests are marked `hardware`. Collection and `--help`
+Without a resource, `hardware` selects no tests. With a resource, all integration
+tests are marked `hardware`. Collection and `--help`
 never connect an instrument. Avoid parallel execution against a single physical
 instrument; changing its settings from multiple tests concurrently is unsupported.

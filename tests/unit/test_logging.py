@@ -101,7 +101,7 @@ def test_serial_binary_warnings_identify_the_caller(driver, resource):
     resource.read_termination = "\r"
     resource.read_bytes.return_value = b"\x00" * 4
     for reader in (driver.get_binary_buffer_data, driver.get_non_norm_buffer_data):
-        resource.query.side_effect = ["0", "0"]
+        resource.query.side_effect = ["0", "1", "0"]
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
             expected_line = inspect.currentframe().f_lineno + 1

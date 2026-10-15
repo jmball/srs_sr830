@@ -49,4 +49,6 @@ def mock_instrument(driver, resource):
 
 @pytest.fixture
 def virtual():
-    return VirtualSR830()
+    instrument = VirtualSR830()
+    instrument.connect("GPIB0::8::INSTR")
+    return instrument

@@ -3,15 +3,18 @@
 The full instrument manual, including the programming guide, can be found at
 https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from types import TracebackType
 from typing import Any
 
 import logging
 import struct
+import math
+import time
 import warnings
 
 import pyvisa
@@ -60,6 +63,8 @@ from .settings import (
     TriggerStartMode,
     _ENABLE_REGISTER_COMMANDS,
     _STATUS_REGISTER_COMMANDS,
+    _require_integer,
+    _time_constant_seconds,
     _validate_enum,
     _validate_register_bit,
     _validate_register_value,
@@ -82,6 +87,7 @@ class SR830:
 
     def __init__(self) -> None:
         self._instr: MessageBasedResource | None = None
+        self._fast_running = False
 
     def _write(self, command: str) -> None:
         """Send a command to the connected instrument."""
@@ -93,12 +99,16 @@ class SR830:
         """Send a command and read its text response."""
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        if self._fast_running:
+            raise RuntimeError("Stop fast transfer before issuing text queries.")
         return self._instr.query(command)
 
     def _query_ascii_values(self, command: str) -> list[str]:
         """Query ASCII fields, preserving empty trailing fields for buffer parsing."""
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        if self._fast_running:
+            raise RuntimeError("Stop fast transfer before issuing text queries.")
         return list(
             self._instr.query_ascii_values(
                 command, converter=lambda value: value, container=list
@@ -111,13 +121,20 @@ class SR830:
             raise RuntimeError(_NOT_CONNECTED_MESSAGE)
         resource = self._instr
         termination = resource.read_termination
-        serial_end = resource.end_input if isinstance(resource, SerialInstrument) else None
+        serial_end = (
+            resource.end_input if isinstance(resource, SerialInstrument) else None
+        )
         try:
             resource.read_termination = None
             if isinstance(resource, SerialInstrument):
                 resource.end_input = SerialTermination.none
             resource.write(command)
-            return resource.read_bytes(size, break_on_termchar=False)
+            data = resource.read_bytes(size, break_on_termchar=False)
+            if len(data) != size:
+                raise OSError(
+                    f"Incomplete binary response: expected {size} bytes, received {len(data)}."
+                )
+            return data
         finally:
             try:
                 if isinstance(resource, SerialInstrument) and serial_end is not None:
@@ -179,7 +196,9 @@ class SR830:
         if self._instr is not None:
             raise RuntimeError("Instrument is already connected; disconnect first.")
         manager = (
-            resource_manager if resource_manager is not None else pyvisa.ResourceManager()
+            resource_manager
+            if resource_manager is not None
+            else pyvisa.ResourceManager()
         )
         interface_type = manager.resource_info(resource_name).interface_type
         interface = resolve_output_interface(interface_type, output_interface)
@@ -225,6 +244,7 @@ class SR830:
         if resource is None:
             return
         self._instr = None
+        self._fast_running = False
         logger.debug("Disconnecting SR830 resource %s", resource)
         try:
             resource.write("LOCL 0")
@@ -292,7 +312,10 @@ class SR830:
             for event_flag, message in (
                 (StandardEventFlag.INPUT_QUEUE_OVERFLOW, "Input queue overflow"),
                 (StandardEventFlag.OUTPUT_QUEUE_OVERFLOW, "Output queue overflow"),
-                (StandardEventFlag.EXECUTION_ERROR, "Command cannot execute/parameter out of range"),
+                (
+                    StandardEventFlag.EXECUTION_ERROR,
+                    "Command cannot execute/parameter out of range",
+                ),
                 (StandardEventFlag.COMMAND_ERROR, "Received illegal command"),
             ):
                 if event_status & event_flag:
@@ -453,6 +476,7 @@ class SR830:
         harmonic : int
             Detection harmonic, 1 =< harmonic =< 19999.
         """
+        _require_integer(harmonic, "harmonic")
         if (harmonic >= 1) and (harmonic <= 19999):
             self._write(f"HARM {harmonic}")
         else:
@@ -959,11 +983,22 @@ class SR830:
                 * 1 : GPIB
         """
         _validate_enum(interface, OutputInterface)
+        if self._fast_running:
+            raise RuntimeError(
+                "Stop fast transfer before changing the output interface."
+            )
         if interface in [0, 1]:
             if self._instr is None:
                 raise RuntimeError(_NOT_CONNECTED_MESSAGE)
-            self._instr.read_termination = "\r" if interface == 0 else "\n"
-            self._write(f"OUTX {int(interface)}")
+            resource = self._instr
+            previous = resource.read_termination
+            try:
+                resource.read_termination = "\r" if interface == 0 else "\n"
+                self._write(f"OUTX {int(interface)}")
+            except BaseException:
+                with suppress(Exception):
+                    resource.read_termination = previous
+                raise
         else:
             raise ValueError(
                 f"Invalid output interface: {interface}. Must be 0 (RS232) or 1 "
@@ -1191,7 +1226,9 @@ class SR830:
                 + "(10), or 2 (100)."
             )
 
-    def get_output_offset_expand(self, parameter: OutputParameter | int) -> tuple[float, int]:
+    def get_output_offset_expand(
+        self, parameter: OutputParameter | int
+    ) -> tuple[float, int]:
         """Get the output offsets and expands.
 
         Parameters
@@ -1397,6 +1434,7 @@ class SR830:
         number : {1 - 9}
             Buffer number, 1 =< number =< 9.
         """
+        _require_integer(number, "number")
         if number in range(1, 10):
             self._write(f"SSET {number}")
         else:
@@ -1413,6 +1451,7 @@ class SR830:
         number : {1 - 9}
             Buffer number, 1 =< number =< 9.
         """
+        _require_integer(number, "number")
         if number in range(1, 10):
             self._write(f"RSET {number}")
         else:
@@ -1542,8 +1581,13 @@ class SR830:
             )
 
     def trigger(self) -> None:
-        """Send software trigger."""
+        """Send software trigger, tracking a trigger-started FAST stream."""
+        starts_fast = False
+        if not self._fast_running:
+            starts_fast = bool(self.trigger_start_mode and self.data_transfer_mode)
         self._write("TRIG")
+        if starts_fast:
+            self._fast_running = True
 
     @property
     def trigger_start_mode(self) -> int:
@@ -1590,19 +1634,26 @@ class SR830:
         After turning on fast data transfer, this function starts the scan after a
         delay of 0.5 sec.
         """
+        if self._fast_running:
+            return
         if self.data_transfer_mode == 0:
             # fast data transfer off
             self._write("STRT")
         else:
             # fast data transfer mode active
             self._write("STRD")
+            self._fast_running = True
 
     def pause(self) -> None:
         """Pause data storage.
 
-        Ignored if storage is already paused or reset.
+        Ignored if storage is already paused or reset. Pending FAST output is
+        discarded with VISA device clear before text queries are allowed again.
         """
         self._write("PAUS")
+        if self._fast_running:
+            self._discard_fast_data()
+        self._fast_running = False
 
     def reset_data_buffers(self) -> None:
         """Reset data buffers.
@@ -1610,6 +1661,9 @@ class SR830:
         This command will erase the data buffer.
         """
         self._write("REST")
+        if self._fast_running:
+            self._discard_fast_data()
+        self._fast_running = False
 
     # --- Data transfer commands ---
 
@@ -1728,211 +1782,122 @@ class SR830:
         """
         return int(self._query("SPTS?"))
 
+    @contextmanager
+    def _buffer_read(
+        self, channel: Channel | int, start_bin: int, bins: int, resume: bool
+    ) -> Iterator[None]:
+        _validate_enum(channel, Channel)
+        _require_integer(start_bin, "start_bin")
+        _require_integer(bins, "bins")
+        if (
+            channel not in (1, 2)
+            or start_bin < 0
+            or bins < 1
+            or start_bin + bins > 16383
+        ):
+            raise ValueError(
+                "Invalid channel or buffer range (capacity is 16383 points)."
+            )
+        if not isinstance(resume, bool):
+            raise ValueError("resume must be a bool.")
+        if self._fast_running:
+            raise RuntimeError("Stop fast transfer before issuing buffer queries.")
+        loop = self.end_of_buffer_mode == EndOfBufferMode.LOOP
+        if loop:
+            self.pause()
+        if start_bin + bins > self.buffer_size:
+            raise ValueError("Requested range exceeds the stored buffer points.")
+        yield
+        # Deliberately do not resume after transfer/decoding failures.
+        if loop and resume:
+            self.start()
+
     def get_ascii_buffer_data(
-        self,
-        channel: Channel | int,
-        start_bin: int,
-        bins: int,
+        self, channel: Channel | int, start_bin: int, bins: int, *, resume: bool = False
     ) -> tuple[float, ...]:
-        """Get the points stored in a channel buffer range.
+        """Read exactly bins ASCII samples, starting at the zero-based start_bin.
 
-        The values are returned as ASCII floating point numbers with
-        the units of the trace.
-
-        Bins (or points) a labelled from 0 (oldest) to N-1 (newest)
-        where N is the total number of bins.
-
-        If data storage is set to Loop mode, storage is paused before
-        reading any data. This is because the points are indexed relative
-        to the most recent point which is continually changing.
+        Channel must be 1 or 2; the requested range must exist in the buffer.
+        Loop scans are paused and left paused. Pass resume=True to start them
+        again after a successful read (even if already paused before this call).
+        Errors leave loop scans paused.
 
         Parameters
         ----------
         channel : Channel or int
-            Channel 1 or 2.
+            Display buffer, 1 or 2.
         start_bin : int
-            Starting bin to read where 0 is oldest. Must be in range 0 - 16382.
+            Zero-based index of the oldest requested point.
         bins : int
-            Number of bins to read. Must be in range 1 - 16383.
+            Positive number of points; start_bin + bins must not exceed the
+            acquired length or the 16383-point capacity.
+        resume : bool, optional
+            Restart a loop scan after success. Defaults to False.
 
         Returns
         -------
-        buffer : tuple of float
-            Data stored in buffer range.
+        tuple of float
+            Buffer samples in the selected display's units.
         """
-        _validate_enum(channel, Channel)
-        if (
-            (channel in (1, 2))
-            and (start_bin in range(16383))
-            and (bins in range(1, 16384))
-        ):
-            # pause storage if loop mode
-            buffer_mode = self.end_of_buffer_mode
-            if buffer_mode == EndOfBufferMode.LOOP:
-                self.pause()
-
-            buffer = self._query_ascii_values(f"TRCA? {int(channel)},{start_bin},{bins}")
-
-            # can leave a newline char at end of array that needs to be removed
-            if (buffer[-1] == "\n") or (buffer[-1] == ""):
-                buffer.pop()
-            # convert to tuple
-            result = tuple(float(x) for x in buffer)
-
-            # restart loop storage if previously set
-            if buffer_mode == EndOfBufferMode.LOOP:
-                self.end_of_buffer_mode = 1
-
-            return result
-        else:
-            raise ValueError(
-                f"Invalid channel, start bin or bins: {channel}, {start_bin}, or "
-                + f"{bins}. Channel must be 1 (Ch1) or 2 (Ch2); start bin must in "
-                + "range 0 - 16382; and bins must be in range 1 - 16383."
+        with self._buffer_read(channel, start_bin, bins, resume):
+            fields = self._query_ascii_values(
+                f"TRCA? {int(channel)},{start_bin},{bins}"
             )
+            fields = [field.strip() for field in fields]
+            if fields and fields[-1] == "":
+                fields.pop()
+            if len(fields) != bins:
+                raise OSError(
+                    f"Incomplete ASCII response: expected {bins} points, received {len(fields)}."
+                )
+            try:
+                result = tuple(float(field) for field in fields)
+            except ValueError as exc:
+                raise OSError("Invalid number in ASCII buffer response.") from exc
+        return result
 
     def get_binary_buffer_data(
-        self,
-        channel: Channel | int,
-        start_bin: int,
-        bins: int,
+        self, channel: Channel | int, start_bin: int, bins: int, *, resume: bool = False
     ) -> tuple[float, ...]:
-        """Get the points stored in a channel buffer range.
+        """Read exactly bins little-endian IEEE float samples in display units.
 
-        The values are returned as IEEE format binary floating point
-        numbers with the units of the trace.
-
-        Bins (or points) a labelled from 0 (oldest) to N-1 (newest)
-        where N is the total number of bins.
-
-        If data storage is set to Loop mode, storage is paused before
-        reading any data. This is because the points are indexed relative
-        to the most recent point which is continually changing.
-
-        Parameters
-        ----------
-        channel : Channel or int
-            Channel 1 or 2.
-        start_bin : int
-            Starting bin to read where 0 is oldest. Must be in range 0 - 16382.
-        bins : int
-            Number of bins to read. Must be in range 1 - 16383.
-
-        Returns
-        -------
-        buffer : tuple of float
-            Data stored in buffer range.
+        Range and pause/resume behavior match get_ascii_buffer_data(). Serial
+        transfers require eight data bits; SRS recommends GPIB for binary data.
         """
-        _validate_enum(channel, Channel)
-        if (
-            (channel in [1, 2])
-            and (start_bin >= 0)
-            and (start_bin <= 16382)
-            and (bins >= 1)
-            and (bins <= 16383)
-        ):
-            # determine how to read buffer over output interface
+        with self._buffer_read(channel, start_bin, bins, resume):
             if self.output_interface == OutputInterface.RS232:
                 warnings.warn(
                     "SRS recommends not using binary transfers over serial interfaces.",
                     stacklevel=2,
                 )
-
-            # pause storage if loop mode
-            buffer_mode = self.end_of_buffer_mode
-            if buffer_mode == EndOfBufferMode.LOOP:
-                self.pause()
-
-            raw = self._read_buffer_bytes(f"TRCB? {int(channel)},{start_bin},{bins}", 4 * bins)
-            buffer = struct.unpack(f"<{bins}f", raw)
-
-            # restart loop storage if previously set
-            if buffer_mode == EndOfBufferMode.LOOP:
-                self.end_of_buffer_mode = 1
-
-            return buffer
-        else:
-            raise ValueError(
-                f"Invalid channel, start bin or bins: {channel}, {start_bin}, or "
-                + f"{bins}. Channel must be 1 (Ch1) or 2 (Ch2); start bin must in "
-                + "range 0 - 16382; and bins must be in range 1 - 16383."
+            raw = self._read_buffer_bytes(
+                f"TRCB? {int(channel)},{start_bin},{bins}", 4 * bins
             )
+            result = struct.unpack(f"<{bins}f", raw)
+        return result
 
     def get_non_norm_buffer_data(
-        self,
-        channel: Channel | int,
-        start_bin: int,
-        bins: int,
+        self, channel: Channel | int, start_bin: int, bins: int, *, resume: bool = False
     ) -> tuple[float, ...]:
-        """Get the points stored in a channel buffer range.
+        """Read SR830 mantissa/exponent samples in display units.
 
-        The values are returned as non-normalised floating point
-        numbers with the units of the trace.
-
-        Bins (or points) a labelled from 0 (oldest) to N-1 (newest)
-        where N is the total number of bins.
-
-        If data storage is set to Loop mode, make sure that
-        storage is paused before reading any data. This is because
-        the points are indexed relative to the most recent point
-        which is continually changing.
-
-        Parameters
-        ----------
-        channel : Channel or int
-            Channel 1 or 2.
-        start_bin : int
-            Starting bin to read where 0 is oldest. Must be in range 0 - 16382.
-        bins : int
-            Number of bins to read. Must be in range 1 - 16383.
-
-        Returns
-        -------
-        buffer : tuple of float
-            Data stored in buffer range.
+        Range and pause/resume behavior match get_ascii_buffer_data(). Errors
+        leave loop scans paused. Each sample occupies four binary bytes.
         """
-        _validate_enum(channel, Channel)
-        if (
-            (channel in [1, 2])
-            and (start_bin >= 0)
-            and (start_bin <= 16382)
-            and (bins >= 1)
-            and (bins <= 16383)
-        ):
+        with self._buffer_read(channel, start_bin, bins, resume):
             if self.output_interface == OutputInterface.RS232:
                 warnings.warn(
                     "SRS recommends not using binary transfers over serial interfaces.",
                     stacklevel=2,
                 )
-
-            # pause storage if loop mode
-            buffer_mode = self.end_of_buffer_mode
-            if buffer_mode == EndOfBufferMode.LOOP:
-                self.pause()
-
-            # Each bin is a little-endian mantissa/exponent pair of 16-bit words.
-            raw = self._read_buffer_bytes(f"TRCL? {int(channel)},{start_bin},{bins}", 4 * bins)
-            buffer = struct.unpack(f"<{2 * bins}h", raw)
-
-            # Convert raw byte array into array of floats using SR830 format
-            mantissa_buffer = buffer[::2]
-            exp_buffer = buffer[1::2]
+            raw = self._read_buffer_bytes(
+                f"TRCL? {int(channel)},{start_bin},{bins}", 4 * bins
+            )
+            words = struct.unpack(f"<{2 * bins}h", raw)
             result = tuple(
-                float(m * 2 ** (e - 124))
-                for m, e in zip(mantissa_buffer, exp_buffer)
+                float(m * 2 ** (e - 124)) for m, e in zip(words[::2], words[1::2])
             )
-
-            # restart loop storage if previously set
-            if buffer_mode == EndOfBufferMode.LOOP:
-                self.end_of_buffer_mode = 1
-
-            return result
-        else:
-            raise ValueError(
-                f"Invalid channel, start bin or bins: {channel}, {start_bin}, or "
-                + f"{bins}. Channel must be 1 (Ch1) or 2 (Ch2); start bin must in "
-                + "range 0 - 16382; and bins must be in range 1 - 16383."
-            )
+        return result
 
     @property
     def data_transfer_mode(self) -> int:
@@ -1968,7 +1933,20 @@ class SR830:
         """
         _validate_enum(mode, DataTransferMode)
         if mode in range(3):
+            if self._fast_running and mode != DataTransferMode.OFF:
+                raise RuntimeError("Stop fast transfer before changing its mode.")
+            if (
+                mode != DataTransferMode.OFF
+                and self.output_interface != OutputInterface.GPIB
+            ):
+                raise ValueError(
+                    "Fast transfer requires the instrument GPIB output interface."
+                )
             self._write(f"FAST {int(mode)}")
+            if mode == DataTransferMode.OFF:
+                if self._fast_running:
+                    self._discard_fast_data()
+                self._fast_running = False
         else:
             raise ValueError(
                 f"Invalid data transfer mode: {mode}. Must be 0 (off), 1 (on [DOS]), "
@@ -1980,6 +1958,9 @@ class SR830:
     def reset(self) -> None:
         """Reset the instrument to the default configuration."""
         self._write("*RST")
+        if self._fast_running:
+            self._discard_fast_data()
+        self._fast_running = False
 
     @property
     def idn(self) -> str:
@@ -1995,7 +1976,7 @@ class SR830:
             List of identification strings consisting of manufacturer, model, serial
             number, and firmware version number in order.
         """
-        return self._query(f"*IDN?")
+        return self._query("*IDN?")
 
     @property
     def local_mode(self) -> int:
@@ -2088,9 +2069,19 @@ class SR830:
     def set_enable_register(
         self,
         register: StatusRegister | str,
-        value: StandardEventFlag | SerialPollFlag | ErrorFlag | LiaStatusFlag | SwitchState | int,
+        value: StandardEventFlag
+        | SerialPollFlag
+        | ErrorFlag
+        | LiaStatusFlag
+        | SwitchState
+        | int,
         decimal: bool = True,
-        bit: StandardEventBit | SerialPollBit | ErrorBit | LiaStatusBit | int | None = None,
+        bit: StandardEventBit
+        | SerialPollBit
+        | ErrorBit
+        | LiaStatusBit
+        | int
+        | None = None,
     ) -> None:
         """Set an enable register.
 
@@ -2120,7 +2111,9 @@ class SR830:
                     )
             else:
                 if bit is not None and 0 <= bit <= 7 and value in (0, 1):
-                    cmd = f"{_ENABLE_REGISTER_COMMANDS[register]} {int(bit)},{int(value)}"
+                    cmd = (
+                        f"{_ENABLE_REGISTER_COMMANDS[register]} {int(bit)},{int(value)}"
+                    )
                 else:
                     raise ValueError(
                         f"Invalud bit or value: {bit} or {value}. Bit must in range"
@@ -2136,7 +2129,12 @@ class SR830:
     def get_enable_register(
         self,
         register: StatusRegister | str,
-        bit: StandardEventBit | SerialPollBit | ErrorBit | LiaStatusBit | int | None = None,
+        bit: StandardEventBit
+        | SerialPollBit
+        | ErrorBit
+        | LiaStatusBit
+        | int
+        | None = None,
     ) -> int:
         """Get the standard event enable register value.
 
@@ -2174,7 +2172,12 @@ class SR830:
     def get_status_byte(
         self,
         status_byte: StatusRegister | str,
-        bit: StandardEventBit | SerialPollBit | ErrorBit | LiaStatusBit | int | None = None,
+        bit: StandardEventBit
+        | SerialPollBit
+        | ErrorBit
+        | LiaStatusBit
+        | int
+        | None = None,
     ) -> int:
         """Get a status byte.
 
@@ -2244,3 +2247,210 @@ class SR830:
                 f"Invalid power on status clear bit: {value}. Must be 0 (cleared) or 1"
                 + " (set)."
             )
+
+    def serial_poll(self) -> int:
+        """Perform a native VISA status-byte poll, acknowledging GPIB SRQ.
+
+        Unlike get_status_byte(), this sends no *STB? query and can observe a
+        busy instrument. Unsupported serial/socket backends raise NotImplementedError.
+        """
+        if self._instr is None:
+            raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        try:
+            return int(self._instr.read_stb())
+        except NotImplementedError as exc:
+            raise NotImplementedError(
+                "This VISA resource does not support native status polling."
+            ) from exc
+        except pyvisa.errors.VisaIOError as exc:
+            if exc.error_code in (
+                pyvisa.constants.StatusCode.error_nonsupported_operation,
+                pyvisa.constants.StatusCode.error_nonimplemented_operation,
+            ):
+                raise NotImplementedError(
+                    "This VISA resource does not support native status polling."
+                ) from exc
+            raise
+
+    @contextmanager
+    def _io_timeout(self, seconds: float) -> Iterator[None]:
+        if self._instr is None:
+            raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        resource = self._instr
+        previous = resource.timeout
+        try:
+            resource.timeout = max(1, math.ceil(seconds * 1000))
+            yield
+        finally:
+            resource.timeout = previous
+
+    def wait_until_ready(
+        self, timeout: float = 10.0, *, poll_interval: float = 0.01
+    ) -> None:
+        """Wait for command completion within timeout seconds.
+
+        Native polling is preferred. Unsupported resources use a queued *STB?
+        query as a completion barrier, bounded by the remaining VISA timeout.
+        This does not imply that the analog filter has settled.
+
+        Parameters
+        ----------
+        timeout : float, optional
+            Positive total command-completion budget in seconds.
+        poll_interval : float, optional
+            Positive delay between native polls in seconds.
+
+        Raises
+        ------
+        TimeoutError
+            Command completion was not observed within the budget.
+        """
+        self._validate_wait(timeout, poll_interval)
+        deadline = time.monotonic() + timeout
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        "Timed out waiting for SR830 command completion."
+                    )
+                with self._io_timeout(remaining):
+                    try:
+                        ready = bool(
+                            self.serial_poll() & SerialPollFlag.NO_COMMAND_IN_PROGRESS
+                        )
+                    except NotImplementedError:
+                        self.get_status_byte(StatusRegister.SERIAL_POLL)
+                        return
+                if ready:
+                    return
+                time.sleep(min(poll_interval, max(0.0, deadline - time.monotonic())))
+        except pyvisa.errors.VisaIOError as exc:
+            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+                raise TimeoutError(
+                    "Timed out waiting for SR830 command completion."
+                ) from exc
+            raise
+
+    @staticmethod
+    def _validate_wait(timeout: float, interval: float) -> None:
+        if (
+            not math.isfinite(timeout)
+            or timeout <= 0
+            or not math.isfinite(interval)
+            or interval <= 0
+        ):
+            raise ValueError(
+                "Timeout and polling interval must be finite and positive."
+            )
+
+    def wait_for_settling(
+        self, timeout: float = 60.0, *, time_constants: float = 10.0
+    ) -> None:
+        """Wait for completion and then time_constants times the filter time constant.
+
+        This is a timing estimate, not a measurement-stability test. timeout is
+        a total budget in seconds; insufficient budgets raise TimeoutError.
+        External locking and synchronous-filter transients are not included.
+
+        Parameters
+        ----------
+        timeout : float, optional
+            Positive total budget for completion, querying, and settling, in seconds.
+        time_constants : float, optional
+            Positive multiple of the selected low-pass time constant to wait.
+        """
+        self._validate_wait(timeout, time_constants)
+        started = time.monotonic()
+        self.wait_until_ready(timeout)
+        remaining = timeout - (time.monotonic() - started)
+        if remaining <= 0:
+            raise TimeoutError("Settling timeout expired.")
+        try:
+            with self._io_timeout(remaining):
+                delay = time_constants * _time_constant_seconds(self.time_constant)
+        except pyvisa.errors.VisaIOError as exc:
+            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+                raise TimeoutError(
+                    "Timed out querying the filter time constant."
+                ) from exc
+            raise
+        if delay > timeout - (time.monotonic() - started):
+            raise TimeoutError("Settling requires more time than the supplied timeout.")
+        time.sleep(delay)
+
+    def read_fast_data(
+        self, samples: int, *, timeout: float = 10.0
+    ) -> tuple[tuple[int, int], ...]:
+        """Read streamed GPIB X/Y pairs as signed 16-bit instrument counts.
+
+        Call data_transfer_mode=WINDOWS or DOS, then start(), before reading.
+        Counts include output offsets/expands; +/-30000 corresponds to the
+        selected full scale before expansion. This method sends no text query.
+        A failed read attempts to stop acquisition and discard pending output;
+        call pause() after a successful final read.
+
+        Parameters
+        ----------
+        samples : int
+            Positive number of X/Y pairs to read.
+        timeout : float, optional
+            Positive VISA read timeout in seconds.
+
+        Returns
+        -------
+        tuple of tuple of int
+            Ordered (X, Y) count pairs, each component in -32768 to 32767.
+        """
+        _require_integer(samples, "samples")
+        if samples < 1:
+            raise ValueError("samples must be positive.")
+        self._validate_wait(timeout, 1.0)
+        if not self._fast_running:
+            raise RuntimeError("Start a fast transfer before reading its stream.")
+        try:
+            with self._io_timeout(timeout):
+                raw = self._read_fast_bytes(samples * 4)
+            if len(raw) != samples * 4:
+                raise OSError("Incomplete fast-transfer response.")
+            return tuple(struct.iter_unpack("<hh", raw))
+        except BaseException as exc:
+            with suppress(Exception):
+                self.pause()
+            if (
+                isinstance(exc, pyvisa.errors.VisaIOError)
+                and exc.error_code == pyvisa.constants.StatusCode.error_timeout
+            ):
+                raise TimeoutError("Timed out reading fast-transfer data.") from exc
+            raise
+
+    def _discard_fast_data(self) -> None:
+        """Clear pending GPIB stream bytes before returning to text I/O.
+
+        VISA device clear discards unread output; acquisition has already stopped.
+        If clearing fails, keep the stream guard active until cleanup succeeds.
+        """
+        if self._instr is None:
+            raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        self._instr.clear()
+
+    def _read_fast_bytes(self, size: int) -> bytes:
+        # Reuse binary framing cleanup without sending any command.
+        if self._instr is None:
+            raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        resource = self._instr
+        termination = resource.read_termination
+        serial_end = (
+            resource.end_input if isinstance(resource, SerialInstrument) else None
+        )
+        try:
+            resource.read_termination = None
+            if isinstance(resource, SerialInstrument):
+                resource.end_input = SerialTermination.none
+            return resource.read_bytes(size, break_on_termchar=False)
+        finally:
+            try:
+                if isinstance(resource, SerialInstrument) and serial_end is not None:
+                    resource.end_input = serial_end
+            finally:
+                resource.read_termination = termination

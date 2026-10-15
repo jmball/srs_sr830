@@ -55,7 +55,8 @@ for GPIB. It defaults command termination to LF and rejects conflicting framing
 before opening the resource. Serial also accepts CR or CRLF commands; GPIB
 accepts CRLF, and native GPIB VISA resources can use EOI alone with
 `write_termination=None` and `send_end=True`. Serial baud rate and parity must
-match the instrument's front-panel settings.
+match the instrument's front-panel settings. RS232 always uses 8 data bits;
+conflicting `data_bits` values are rejected.
 
 All connection options after the resource name are keyword-only. Connection
 selects the output interface and enables status registers. Set `local_mode`
@@ -86,8 +87,8 @@ are finished. The virtual driver accepts the same connection options without
 opening hardware.
 
 Both packages ship inline type hints. `measure_multiple()` returns an iterator
-of floats; buffer readers return tuples. The virtual status-register getters
-remain unimplemented and return `None`.
+of floats; buffer readers return tuples. Integer protocol fields reject floats
+and booleans rather than silently coercing them.
 
 ## Named settings
 
@@ -178,8 +179,9 @@ errors = ErrorFlag(instrument.get_status_byte(StatusRegister.ERROR))
 
 The four position/mask pairs are `StandardEventBit`/`StandardEventFlag`,
 `SerialPollBit`/`SerialPollFlag`, `ErrorBit`/`ErrorFlag`, and
-`LiaStatusBit`/`LiaStatusFlag`. Virtual register getters remain unimplemented
-and return `None`.
+`LiaStatusBit`/`LiaStatusFlag`. Both drivers implement enable registers, event
+registers, and serial-poll status. Reading event registers clears the queried
+events; `serial_poll()` performs native VISA polling and acknowledges SRQ.
 
 The enums are the public representation of discrete settings; legacy value
 and description tables have been removed. Member meanings, physical units,
@@ -187,6 +189,94 @@ and instrument command codes are documented in their enum docstrings.
 Setters accept enum members or integer command codes, not physical values.
 See the [SR830 programming manual](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf)
 for instrument codes and units.
+
+## Acquisition and completion
+
+Buffer readers validate the range against the 16383-point capacity and the
+number of acquired samples. ASCII and binary reads reject incomplete responses.
+Loop scans are paused before reading and **remain paused by default**. Pass
+`resume=True` to restart with `STRT` after a successful read; failed reads leave
+acquisition paused. The instrument cannot reliably report whether an existing
+scan is paused, so this is an explicit policy rather than an inferred restoration.
+One-shot scans are not automatically paused or restarted.
+
+`wait_until_ready(timeout=10)` waits for command completion, using native VISA
+status polling where supported and a queued query otherwise. `wait_for_settling(
+timeout=60, time_constants=10)` additionally waits the requested multiple of the
+selected low-pass time constant. Both use seconds and raise `TimeoutError` when
+the budget is insufficient. Settling is an estimate, not a stability measurement
+or a model of external reference locking and synchronous-filter transients.
+
+GPIB FAST transfers have a dedicated reader:
+
+```python
+from sr830 import DataTransferMode, SampleRate
+
+instrument.sample_rate = SampleRate.Hz_64
+instrument.data_transfer_mode = DataTransferMode.WINDOWS
+instrument.start()  # STRD provides the instrument's 0.5-second startup delay.
+try:
+    xy_counts = instrument.read_fast_data(32, timeout=2)
+finally:
+    instrument.pause()
+```
+
+Each pair contains signed 16-bit X/Y counts. Before offset and expansion,
+±30000 corresponds to the selected full scale; FAST counts include both offset
+and expansion. FAST is GPIB only. Read promptly: FAST2 has room for only 63 pairs.
+Text queries are blocked while the driver tracks an active FAST stream. Pausing
+stops acquisition and uses VISA device clear to discard unread stream bytes
+before text I/O resumes; a failed clear keeps that guard active. A failed FAST
+read attempts the same cleanup. Resetting the buffers, resetting the instrument,
+or disabling FAST also clears pending stream bytes.
+
+## Simulation
+
+`VirtualSR830` inherits the hardware driver's settings, validation, and command
+methods. Its in-memory protocol model provides coherent X/Y/R/phase readings,
+cascaded low-pass settling, offsets, display ratios, independent auxiliary inputs
+and outputs, auto functions, saved setups, status registers, triggered and timed
+acquisition, bounded circular buffers, all three trace encodings, and FAST counts.
+Reset preserves the response interface and status registers, as on the instrument.
+
+```python
+from virtual_sr830 import VirtualSR830
+from sr830 import MeasurementParameter, SampleRate, TimeConstant
+
+with VirtualSR830(clock=lambda: 0.0) as instrument:
+    instrument.connect("GPIB0::8::INSTR")  # No VISA resource is opened.
+    instrument.time_constant = TimeConstant.ms_100
+    instrument.set_signal(0.003, 0.004)  # Demodulated RMS X/Y in V.
+    instrument.wait_for_settling()      # Advances simulation time, no sleep.
+    print(tuple(instrument.measure_multiple([
+        MeasurementParameter.X, MeasurementParameter.Y, MeasurementParameter.R,
+    ])))
+    instrument.sample_rate = SampleRate.Hz_16
+    instrument.start()
+    instrument.advance_time(0.25)
+    trace = instrument.get_ascii_buffer_data(1, 0, 4)
+```
+
+The default clock follows monotonic wall time. An injected clock plus
+`advance_time(seconds)` makes experiments deterministic and fast. Constructor
+`signal=lambda seconds: complex(x, y)` provides a time-dependent input, evaluated
+at simulation updates and acquisition sample times. Constant-input changes have
+an analytic cascaded-filter step response; varying callbacks use a stepwise input
+approximation, so advance in small increments for rapid waveforms. `set_signal()`
+replaces the callback; `settle=True` initializes the filter immediately.
+
+Signals are demodulated RMS amplitudes in V for voltage mode and A for current
+mode, before phase, offset, and expansion. `set_aux_input(channel, voltage)` and
+`set_external_reference(frequency, locked=True)` supply external conditions;
+`inject_status(register, mask)` supplies faults for application tests. Configuration
+survives disconnect/reconnect, while I/O requires a connection.
+
+This models an ideal demodulated signal, not the analog front end: notch filters,
+AC coupling, synchronous rejection, input noise, calibration, overload distortion,
+and reserve-dependent interference are not electrically simulated. Noise displays
+read zero for the ideal input, and auto reserve selects low noise. The signal
+callback can supply demodulated interference or noise to test application behavior.
+Simulation does not validate VISA transport, adapter firmware, or physical accuracy.
 
 ## Logging and warnings
 
@@ -230,7 +320,7 @@ uv run --locked pytest
 ```
 
 `tests/unit/` uses fake VISA resources. `tests/integration/` exercises the public
-interface on `VirtualSR830` by default; hardware-only register tests are skipped.
+interface, including acquisition and registers, on `VirtualSR830` by default.
 To run the integration tests against a real instrument:
 
 ```sh
@@ -258,7 +348,7 @@ Type-check and build distributions with:
 ```sh
 uv run --locked mypy --python-version 3.10 --strict --follow-imports=silent \
     src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py \
-    src/virtual_sr830/virtual_sr830.py
+    src/virtual_sr830/virtual_sr830.py src/virtual_sr830/_simulation.py
 uv build
 ```
 

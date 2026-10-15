@@ -153,7 +153,7 @@ def test_buffer_readers_accept_channel_enums_and_reject_zero(
         ):
             with pytest.raises(ValueError):
                 method(0, 0, 1)
-    resource.query.return_value = "0"
+    resource.query.side_effect = ["0", "1", "0", "1"]
     resource.query_ascii_values.return_value = ["1.5", ""]
     for channel in settings.Channel:
         assert mock_instrument.get_ascii_buffer_data(channel, 0, 1) == (1.5,)
@@ -177,14 +177,15 @@ def test_loop_buffer_readers_use_enum_modes_without_legacy_tables(
     resource.read_termination = "\n"
     for reader, command, raw in readers:
         resource.write.reset_mock()
-        resource.query.side_effect = ["1"] if raw is None else ["1", "1"]
+        resource.query.side_effect = ["1", "1"] if raw is None else ["1", "1", "1"]
         resource.query_ascii_values.return_value = ["1.25", ""]
         resource.read_bytes.return_value = raw
         result = reader(settings.Channel.CH2, 0, 1)
         assert result == ((10.0,) if command == "TRCL?" else (1.25,))
         commands = [call.args[0] for call in resource.write.call_args_list]
         assert commands[0] == "PAUS"
-        assert commands[-1] == "SEND 1"
+        assert "SEND 1" not in commands
+        assert "STRT" not in commands
         if raw is not None:
             assert f"{command} 2,0,1" in commands
 
@@ -258,8 +259,8 @@ def test_register_names_positions_and_masks(mock_instrument, resource, virtual):
             resource.query.assert_called_with(f"{enable_command}? {int(bit)}")
             assert mock_instrument.get_status_byte(register, bit) == 1
             resource.query.assert_called_with(f"{status_query} {int(bit)}")
-            assert virtual.get_enable_register(register, bit) is None
-            assert virtual.get_status_byte(register, bit) is None
+            assert virtual.get_enable_register(register, bit) == 1
+            assert virtual.get_status_byte(register, bit) in (0, 1)
         members = list(flags)
         combined = members[0] | members[-1]
         mock_instrument.set_enable_register(register, combined)

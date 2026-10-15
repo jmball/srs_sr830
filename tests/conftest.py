@@ -49,8 +49,8 @@ def pytest_addoption(parser):
     group.addoption(
         "--data-bits",
         type=int,
-        choices=(5, 6, 7, 8),
-        help="Serial data bits; binary transfers require 8.",
+        choices=(8,),
+        help="Serial data bits; the SR830 requires 8.",
     )
     group.addoption(
         "--parity",
@@ -106,15 +106,6 @@ def instrument(instrument_options):
 
 
 @pytest.fixture
-def hardware_instrument(instrument):
-    if isinstance(instrument, VirtualSR830):
-        pytest.skip(
-            "Requires --resource-name; the virtual driver does not simulate registers."
-        )
-    return instrument
-
-
-@pytest.fixture
 def internal_reference(instrument):
     # Frequency is writable only in internal-reference mode on real hardware.
     with preserve_settings(instrument, "reference_source"):
@@ -127,10 +118,7 @@ def internal_reference(instrument):
 
 @pytest.fixture
 def recorded_instrument(instrument, pytestconfig):
-    """Acquire four real points, or use virtual dummy buffers without pretending to acquire."""
-    if isinstance(instrument, VirtualSR830):
-        yield instrument
-        return
+    """Acquire four points using the same interface on hardware and simulation."""
     with preserve_settings(
         instrument,
         "sample_rate",
@@ -146,6 +134,8 @@ def recorded_instrument(instrument, pytestconfig):
         instrument.sample_rate = SampleRate.Hz_16
         try:
             instrument.start()
+            if isinstance(instrument, VirtualSR830):
+                instrument.advance_time(0.3)
             deadline = time.monotonic() + pytestconfig.getoption("acquisition_timeout")
             while instrument.buffer_size < 4:
                 if time.monotonic() >= deadline:

@@ -4,8 +4,10 @@ Integer enum values are instrument command codes, not physical values.
 Unit-valued settings use <unit>_<value>; multiplier settings use x<value>.
 SI prefixes in numbers use n (nano), u (micro), and m (milli).
 """
+
 from collections.abc import Mapping
 from enum import Enum, IntEnum, IntFlag
+from numbers import Integral
 from types import MappingProxyType
 
 
@@ -496,45 +498,61 @@ class LiaStatusFlag(IntFlag):
     TRIGGER = 1 << 6
 
 
-_ENABLE_REGISTER_COMMANDS: Mapping[str, str] = MappingProxyType({
-    "standard_event": "*ESE",
-    "serial_poll": "*SRE",
-    "error": "ERRE",
-    "lia_status": "LIAE",
-})
+_ENABLE_REGISTER_COMMANDS: Mapping[str, str] = MappingProxyType(
+    {
+        "standard_event": "*ESE",
+        "serial_poll": "*SRE",
+        "error": "ERRE",
+        "lia_status": "LIAE",
+    }
+)
 
-_STATUS_REGISTER_COMMANDS: Mapping[str, str] = MappingProxyType({
-    "standard_event": "*ESR?",
-    "serial_poll": "*STB?",
-    "error": "ERRS?",
-    "lia_status": "LIAS?",
-})
+_STATUS_REGISTER_COMMANDS: Mapping[str, str] = MappingProxyType(
+    {
+        "standard_event": "*ESR?",
+        "serial_poll": "*STB?",
+        "error": "ERRS?",
+        "lia_status": "LIAS?",
+    }
+)
 
 
 # Positions and masks have distinct types to prevent confusing bit 2 with mask 4.
-_REGISTER_BITS: Mapping[str, type[IntEnum]] = MappingProxyType({
-    "standard_event": StandardEventBit,
-    "serial_poll": SerialPollBit,
-    "error": ErrorBit,
-    "lia_status": LiaStatusBit,
-})
-_REGISTER_FLAGS: Mapping[str, type[IntFlag]] = MappingProxyType({
-    "standard_event": StandardEventFlag,
-    "serial_poll": SerialPollFlag,
-    "error": ErrorFlag,
-    "lia_status": LiaStatusFlag,
-})
+_REGISTER_BITS: Mapping[str, type[IntEnum]] = MappingProxyType(
+    {
+        "standard_event": StandardEventBit,
+        "serial_poll": SerialPollBit,
+        "error": ErrorBit,
+        "lia_status": LiaStatusBit,
+    }
+)
+_REGISTER_FLAGS: Mapping[str, type[IntFlag]] = MappingProxyType(
+    {
+        "standard_event": StandardEventFlag,
+        "serial_poll": SerialPollFlag,
+        "error": ErrorFlag,
+        "lia_status": LiaStatusFlag,
+    }
+)
 
 
 def _validate_enum(value: object, expected: type[Enum]) -> None:
     """Reject unrelated enums while retaining plain integer/string compatibility."""
+    if issubclass(expected, (IntEnum, IntFlag)) and value is not None:
+        _require_integer(value, expected.__name__)
     if isinstance(value, Enum) and not isinstance(value, expected):
-        raise ValueError(f"Expected {expected.__name__}, received {type(value).__name__}.")
+        raise ValueError(
+            f"Expected {expected.__name__}, received {type(value).__name__}."
+        )
 
 
 def _validate_register_bit(register: str, bit: object) -> None:
     """Validate an enum bit position against its register; integers remain valid."""
     _validate_enum(register, StatusRegister)
+    if bit is not None:
+        _require_integer(bit, "bit")
+        if not isinstance(bit, Integral) or not 0 <= int(bit) <= 7:
+            raise ValueError("bit must be in range 0 to 7.")
     if register in _REGISTER_BITS:
         _validate_enum(bit, _REGISTER_BITS[register])
 
@@ -542,5 +560,36 @@ def _validate_register_bit(register: str, bit: object) -> None:
 def _validate_register_value(register: str, value: object, decimal: bool) -> None:
     """Validate masks for whole-byte writes and switch states for bit writes."""
     _validate_enum(register, StatusRegister)
+    if not isinstance(decimal, bool):
+        raise ValueError("decimal must be a bool.")
+    _require_integer(value, "value")
+    if not isinstance(value, Integral) or not 0 <= int(value) <= (
+        255 if decimal else 1
+    ):
+        raise ValueError("value must be 0 to 255 for a mask, or 0/1 for a bit.")
     if register in _REGISTER_FLAGS:
         _validate_enum(value, _REGISTER_FLAGS[register] if decimal else SwitchState)
+
+
+def _require_integer(value: object, name: str) -> None:
+    """Validate integer protocol fields without truncating floats or accepting bools."""
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ValueError(f"{name} must be an integer.")
+
+
+def _time_constant_seconds(code: int) -> float:
+    """Convert the documented unit/value name for timing calculations."""
+    unit, number = TimeConstant(code).name.split("_")
+    return int(number) * {"us": 1e-6, "ms": 1e-3, "s": 1.0, "ks": 1e3}[unit]
+
+
+def _full_scale(code: int, input_configuration: int) -> float:
+    """Full-scale amplitude in V or A, from the sensitivity multiplier name."""
+    text = Sensitivity(code).name[1:]
+    suffix = text[-1] if text[-1].isalpha() else ""
+    number = float(text[:-1] if suffix else text)
+    return (
+        number
+        * {"": 1.0, "n": 1e-9, "u": 1e-6, "m": 1e-3}[suffix]
+        * (1e-6 if input_configuration >= 2 else 1.0)
+    )

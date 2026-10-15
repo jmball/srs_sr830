@@ -88,6 +88,7 @@ def test_wrong_device_is_closed_before_tests_can_change_settings(
 
 def test_settings_are_restored_after_an_assertion():
     instrument = VirtualSR830()
+    instrument.connect("ASRL1::INSTR")
     original = instrument.reference_frequency
     with pytest.raises(AssertionError):
         with preserve_settings(instrument, "reference_frequency"):

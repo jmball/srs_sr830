@@ -34,6 +34,7 @@ def test_setting_codes_emit_commands_and_return_integers(
     mock_instrument, resource, virtual, name, member, command, as_integer
 ):
     value = int(member) if as_integer else member
+    resource.query.return_value = "1"  # GPIB is required for FAST modes.
     setattr(mock_instrument, name, value)
     resource.write.assert_called_with(f"{command} {int(member)}")
     resource.query.return_value = str(int(member))
@@ -77,6 +78,7 @@ def test_display_enums_preserve_integer_tuple_returns(
 
 
 def test_connect_accepts_named_output_interface(virtual):
+    virtual.disconnect()
     virtual.connect(
         "TCPIP0::example.invalid::1234::SOCKET",
         output_interface=settings.OutputInterface.GPIB,

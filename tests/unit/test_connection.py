@@ -254,7 +254,7 @@ def test_ascii_buffer_uses_guarded_query_and_preserves_parsing(
     connect, driver, resource
 ):
     connect()
-    resource.query.return_value = "0"
+    resource.query.side_effect = ["0", "2"]
     resource.query_ascii_values.return_value = ["1.25", "-2.5", ""]
     assert driver.get_ascii_buffer_data(1, 0, 2) == (1.25, -2.5)
     assert resource.query_ascii_values.call_args.args == ("TRCA? 1,0,2",)
@@ -263,7 +263,9 @@ def test_ascii_buffer_uses_guarded_query_and_preserves_parsing(
 def test_virtual_connection_matches_api_and_preserves_settings():
     for name, interface in (("ASRL1::INSTR", 0), ("GPIB0::14::INSTR", 1)):
         virtual = VirtualSR830()
+        virtual.connect(name)
         virtual.reference_frequency = 1234.0
+        virtual.disconnect()
         virtual.connect(name)
         assert virtual.output_interface == interface
         assert virtual.reference_frequency == 1234.0
@@ -271,7 +273,9 @@ def test_virtual_connection_matches_api_and_preserves_settings():
             virtual.connect(name)
         virtual.disconnect()
         virtual.disconnect()
+        virtual.connect(name)
         assert virtual.local_mode == 0
+        virtual.disconnect()
     virtual = VirtualSR830()
     with pytest.raises(ValueError):
         virtual.connect("TCPIP0::example.invalid::1234::SOCKET")
@@ -299,8 +303,8 @@ def test_local_mode_is_an_explicit_caller_setting(connect, driver, resource):
     resource.write.assert_called_with("LOCL 1")
     for mode in (0, 1, 2):
         virtual = VirtualSR830()
-        virtual.local_mode = mode
         virtual.connect("ASRL1::INSTR")
+        virtual.local_mode = mode
         assert virtual.local_mode == mode
 
 
@@ -335,7 +339,7 @@ def test_binary_buffers_ignore_text_terminators_and_restore_framing(
         return raw
 
     resource.read_bytes.side_effect = read
-    resource.query.side_effect = ["0", "0"]
+    resource.query.side_effect = ["0", "1", "0"]
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         assert driver.get_binary_buffer_data(1, 0, 1) == struct.unpack("<f", raw)
@@ -344,7 +348,7 @@ def test_binary_buffers_ignore_text_terminators_and_restore_framing(
     assert resource.end_input == original_end
     resource.read_bytes.side_effect = None
     resource.read_bytes.return_value = struct.pack("<hh", 10, 124)
-    resource.query.side_effect = ["0", "0"]
+    resource.query.side_effect = ["0", "1", "0"]
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         assert driver.get_non_norm_buffer_data(1, 0, 1) == (10.0,)
@@ -354,7 +358,7 @@ def test_binary_buffers_ignore_text_terminators_and_restore_framing(
 def test_binary_read_failure_restores_text_framing(connect, driver, resource):
     connect()
     original_end = resource.end_input
-    resource.query.side_effect = ["1", "0"]
+    resource.query.side_effect = ["1", "1", "0"]
     resource.read_bytes.side_effect = OSError("read failed")
     with pytest.raises(OSError, match="read failed"):
         driver.get_binary_buffer_data(1, 0, 1)

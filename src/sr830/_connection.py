@@ -35,6 +35,12 @@ def connection_kwargs(
 ) -> dict[str, Any]:
     """Validate framing and supply protocol defaults without overwriting callers."""
     kwargs = resource_kwargs.copy()
+    if interface_type == InterfaceType.asrl:
+        if "data_bits" in kwargs and (
+            type(kwargs["data_bits"]) is not int or kwargs["data_bits"] != 8
+        ):
+            raise ValueError("SR830 RS232 requires data_bits=8.")
+        kwargs.setdefault("data_bits", 8)
     read_termination = "\r" if output_interface == 0 else "\n"
     if "read_termination" in kwargs and kwargs["read_termination"] != read_termination:
         raise ValueError(f"read_termination must be {read_termination!r}.")

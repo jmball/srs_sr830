@@ -1,4 +1,4 @@
-"""Real buffer acquisition/readout, or the virtual driver's documented dummy reads."""
+"""Buffer acquisition/readout shared by hardware and the stateful simulator."""
 
 import math
 import pytest
