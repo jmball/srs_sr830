@@ -35,9 +35,15 @@ sr830 = ["py.typed"]
 virtual_sr830 = ["py.typed"]
 
 [project.optional-dependencies]
-test = [
+serial = [
+  "pyvisa-py[serial]",
+]
+
+[dependency-groups]
+dev = [
   "pytest >= 8.3",
   "pytest-cov >= 5",
+  "mypy >= 1.10",
 ]
 
 [tool.pytest.ini_options]

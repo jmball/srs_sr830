@@ -3,17 +3,22 @@ Control a Stanford Research Systems SR830 lock-in amplifier
 
 ## Installation
 
-Requires Python 3.10 or newer. Install from the repository root:
+Requires Python 3.10 or newer. Install [uv](https://docs.astral.sh/uv/getting-started/installation/),
+then run from the repository root:
 
 ```sh
-python -m pip install .
+uv sync --locked
 ```
 
-For development, create a virtual environment and install in editable mode:
+uv creates `.venv`, installs the project in editable mode, and installs the
+`dev` dependency group (pytest, coverage, and mypy). Run commands with `uv run`;
+activating the environment is optional. Commit `uv.lock` when dependencies change.
+
+For a runtime-only environment, use `uv sync --locked --no-dev`. Native serial
+access through the Python VISA backend is available with the `serial` extra:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -e .
+uv sync --locked --extra serial
 ```
 
 Package metadata, dependencies, and build configuration are in `pyproject.toml`.
@@ -217,11 +222,11 @@ at the application level.
 
 ## Testing
 
-Install the test dependencies and run pytest:
+Run the tests using the locked development environment:
 
 ```sh
-python -m pip install -e ".[test]"
-python -m pytest
+uv sync --locked
+uv run --locked pytest
 ```
 
 `tests/unit/` uses fake VISA resources. `tests/integration/` exercises the public
@@ -229,14 +234,14 @@ interface on `VirtualSR830` by default; hardware-only register tests are skipped
 To run the integration tests against a real instrument:
 
 ```sh
-python -m pytest tests/integration --resource-name "ASRL2::INSTR" \
+uv run --locked --extra serial pytest tests/integration --resource-name "ASRL2::INSTR" \
     --visa-backend=@py --baud-rate 9600 --data-bits 8 --parity none --stop-bits 1
 ```
 
 For adapters whose instrument-side interface is ambiguous, supply
 `--output-interface 0` (RS232) or `--output-interface 1` (GPIB). Use
 `--visa-backend=@py` with the equals sign because pytest interprets standalone
-`@...` arguments as argument files. `python -m pytest --help` lists all options.
+`@...` arguments as argument files. `uv run --locked pytest --help` lists all options.
 
 Hardware runs temporarily change settings and outputs, and buffer tests pause
 acquisition and clear existing buffers. Changed properties are restored on exit;
@@ -244,6 +249,20 @@ previous acquisition data and scan activity cannot be restored. See the
 [test guide](tests/README.md) for the layout, hardware options, and limitations.
 
 ```sh
-python -m pytest -m unit
-python -m pytest --cov --cov-report=term-missing
+uv run --locked pytest -m unit
+uv run --locked pytest --cov --cov-report=term-missing
 ```
+
+Type-check and build distributions with:
+
+```sh
+uv run --locked mypy --python-version 3.10 --strict --follow-imports=silent \
+    src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py \
+    src/virtual_sr830/virtual_sr830.py
+uv build
+```
+
+Use `uv add <package>` for runtime dependencies, `uv add --dev <package>` for
+development tools, and `uv lock --upgrade-package <package>` for a targeted
+lockfile update. `uv sync --locked` verifies that the lockfile matches
+`pyproject.toml` before installing it.

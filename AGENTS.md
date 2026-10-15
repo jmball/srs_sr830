@@ -30,8 +30,11 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
 - `tests/cases.py`: shared setting/command cases; do not import another test module.
 - `tests/README.md`: test commands, hardware options, and virtual limitations.
 - `pyproject.toml`: package metadata, package discovery, runtime dependencies
-  (`pyvisa` and `pyvisa-py`), and the setuptools build backend. Keep installation
+  (`pyvisa` and `pyvisa-py`), the serial extra, the dev dependency group, pytest
+  and coverage settings, and the setuptools build backend. Keep installation
   configuration here; there is no `setup.cfg` or `setup.py`.
+- `uv.lock`: committed universal dependency lockfile. Update it with dependency
+  changes; do not pin the supported Python range to a single local interpreter.
 
 The distribution is named `srs_sr830`; imports are `sr830` and `virtual_sr830`.
 The hardware class is `sr830.SR830`; the virtual class is
@@ -74,23 +77,22 @@ The hardware class is `sr830.SR830`; the virtual class is
   root logger, capture warnings globally, or print. The `errors` property returns
   its list silently. Serial-transfer warnings use `stacklevel=2`.
 - No CI, formatter, or linter is configured. Both packages ship `py.typed`.
-  Driver annotations can be checked with `mypy --strict --follow-imports=silent
+  Driver annotations can be checked with `uv run --locked mypy --strict --follow-imports=silent
   src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py
-  src/virtual_sr830/virtual_sr830.py` (install mypy separately).
+  src/virtual_sr830/virtual_sr830.py` (included in the dev group).
 
 ## Setup and validation
 
-Use an isolated environment when dependencies are needed:
+Use uv to manage the project environment and locked dependencies:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -e ".[test]"
+uv sync --locked
 ```
 
 A syntax check that does not open hardware is:
 
 ```sh
-python3 -m compileall -q src tests examples
+uv run --locked python -m compileall -q src tests examples
 ```
 
 For driver behavior changes, prefer focused checks using a fake VISA resource
@@ -98,12 +100,18 @@ or the virtual instrument. Verify relevant commands, conversions, valid range
 boundaries, and invalid values. Report which checks ran and whether hardware
 behavior remains unverified.
 
-Use `python -m pytest` for normal validation; tests are discovered only under
-`tests/`. `python -m pytest -m unit` selects isolated tests, and
-`python -m pytest --cov --cov-report=term-missing` reports line/branch coverage.
-Test dependencies are declared in the `test` extra in pyproject.toml. Keep tests
+Use `uv run --locked pytest` for normal validation; tests are discovered only under
+`tests/`. `uv run --locked pytest -m unit` selects isolated tests, and
+`uv run --locked pytest --cov --cov-report=term-missing` reports line/branch coverage.
+Development dependencies are declared in the `dev` dependency group in pyproject.toml. Keep tests
 as pytest functions using fixtures, parametrization, and plain assertions.
 There is no legacy test module in src and no import-time argument parsing.
+
+Use `uv add --dev` for development tools, `uv add` for runtime dependencies,
+and `uv lock --upgrade-package` for targeted updates. Commit pyproject.toml and
+uv.lock together. Use `uv build` for distributions. The default dev group includes
+pytest, pytest-cov, and mypy. For serial hardware, keep `--extra serial` on both
+`uv sync` and `uv run` commands so synchronization retains pyserial.
 
 Integration fixtures create fresh connections and restore changed properties even
 when tests fail. Supplying --resource-name selects real hardware; a connection

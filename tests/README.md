@@ -1,8 +1,8 @@
 # Running the tests
 
 ```sh
-python -m pip install -e ".[test]"
-python -m pytest
+uv sync --locked
+uv run --locked pytest
 ```
 
 The default run opens no hardware. Unit tests use fake VISA resources; integration
@@ -36,24 +36,27 @@ instrument to obtain its initial state.
 ## Real hardware
 
 Provide a VISA resource to run integration tests on an SR830. For native serial
-access through the Python backend, install its serial dependency first:
+access through the Python backend, select the serial extra:
 
 ```sh
-python -m pip install "pyvisa-py[serial]"
+uv sync --locked --extra serial
 ```
 
 ```sh
 # Serial settings must match the front panel. Binary reads require 8 data bits.
-python -m pytest tests/integration --resource-name "ASRL2::INSTR" \
+uv run --locked --extra serial pytest tests/integration --resource-name "ASRL2::INSTR" \
     --visa-backend=@py --baud-rate 9600 --data-bits 8 --parity none --stop-bits 1
 
 # Native GPIB response routing is inferred.
-python -m pytest tests/integration --resource-name "GPIB0::8::INSTR"
+uv run --locked pytest tests/integration --resource-name "GPIB0::8::INSTR"
 
 # Ambiguous Ethernet-to-GPIB adapter: explicitly choose the downstream interface.
-python -m pytest tests/integration \
+uv run --locked pytest tests/integration \
     --resource-name "TCPIP0::192.0.2.10::1234::SOCKET" --output-interface 1
 ```
+
+Keep `--extra serial` on `uv run` commands that need the serial extra; uv
+synchronizes the selected extras for each run.
 
 Use `--visa-backend=@py`, including the equals sign: pytest interprets a separate
 `@py` argument as an argument-file reference. An explicit resource is never
@@ -94,10 +97,10 @@ compatibility. Physical signal accuracy requires a known signal and a hardware r
 ## Selection and coverage
 
 ```sh
-python -m pytest -m unit
-python -m pytest -m integration
-python -m pytest -m hardware --resource-name "GPIB0::8::INSTR"
-python -m pytest --cov --cov-report=term-missing
+uv run --locked pytest -m unit
+uv run --locked pytest -m integration
+uv run --locked pytest -m hardware --resource-name "GPIB0::8::INSTR"
+uv run --locked pytest --cov --cov-report=term-missing
 ```
 
 Without a resource, `hardware` selects only the skipped register tests. With a
