@@ -1,0 +1,106 @@
+# Running the tests
+
+```sh
+python -m pip install -e ".[test]"
+python -m pytest
+```
+
+The default run opens no hardware. Unit tests use fake VISA resources; integration
+tests connect a fresh `VirtualSR830` for each test. Register tests skip because the
+virtual driver does not implement register state. A reported skip is distinct from
+a passing hardware check.
+
+## Layout
+
+| Location | Purpose |
+| --- | --- |
+| `unit/test_connection.py` | Initialization, cleanup, reconnection, framing, and binary transfers |
+| `unit/test_settings.py` | Parametrized integer/enum codes, commands, and getter types |
+| `unit/test_enums.py` | Named selectors, enum validation, register masks, and buffer modes |
+| `unit/test_logging.py` | Library logging policy, warnings, and error decoding |
+| `unit/test_instrument_fixtures.py` | Backend selection, option forwarding, failures, and restoration with fake VISA |
+| `integration/test_settings.py` | Setting, display, expansion, and auxiliary-output round trips |
+| `integration/test_measurements.py` | Identification and finite public measurement results |
+| `integration/test_buffers.py` | Real acquisition/readout, or virtual dummy buffer reads |
+| `integration/test_status.py` | Hardware-only register masks and status reads |
+| `conftest.py` | CLI options and integration fixtures |
+| `unit/conftest.py` | Unit-test mocks |
+| `support.py`, `cases.py` | Shared helpers and test data |
+
+Tests use pytest functions, fixtures, parametrization, and plain assertions.
+`unittest.mock` is retained for fake VISA calls; there are no unittest test classes.
+Each test owns its connection and restores the properties it changes, so tests
+can run individually without depending on earlier tests. No test resets the
+instrument to obtain its initial state.
+
+## Real hardware
+
+Provide a VISA resource to run integration tests on an SR830. For native serial
+access through the Python backend, install its serial dependency first:
+
+```sh
+python -m pip install "pyvisa-py[serial]"
+```
+
+```sh
+# Serial settings must match the front panel. Binary reads require 8 data bits.
+python -m pytest tests/integration --resource-name "ASRL2::INSTR" \
+    --visa-backend=@py --baud-rate 9600 --data-bits 8 --parity none --stop-bits 1
+
+# Native GPIB response routing is inferred.
+python -m pytest tests/integration --resource-name "GPIB0::8::INSTR"
+
+# Ambiguous Ethernet-to-GPIB adapter: explicitly choose the downstream interface.
+python -m pytest tests/integration \
+    --resource-name "TCPIP0::192.0.2.10::1234::SOCKET" --output-interface 1
+```
+
+Use `--visa-backend=@py`, including the equals sign: pytest interprets a separate
+`@py` argument as an argument-file reference. An explicit resource is never
+silently replaced with a virtual instrument if connection or initialization fails.
+The fixture checks the model identification before yielding the instrument to a
+test, closes the resource on exit, and closes the resource manager it creates.
+Unit tests keep using fake VISA resources even during a hardware run.
+
+| Option | Meaning | Default |
+| --- | --- | --- |
+| `--resource-name` | VISA resource or alias | VirtualSR830 |
+| `--visa-backend` | PyVISA backend or library path | PyVISA default |
+| `--output-interface` | Instrument-side RS232 (0) or GPIB (1) | Infer for native ASRL/GPIB |
+| `--visa-timeout` | VISA I/O timeout in milliseconds | 5000 |
+| `--baud-rate` | Serial baud rate | VISA default |
+| `--data-bits` | Serial data bits: 5, 6, 7, or 8 | VISA default |
+| `--parity` | none, odd, even, mark, or space | VISA default |
+| `--stop-bits` | 1, 1.5, or 2 | VISA default |
+| `--write-termination` | LF, CR, or CRLF | Driver LF |
+| `--acquisition-timeout` | Maximum buffer-acquisition wait in seconds | 10 |
+
+Serial options configure native VISA serial resources; configure the serial side
+of an Ethernet adapter using the adapter's own interface. Tests do not set an
+instrument's GPIB address or serial baud rate remotely.
+
+Hardware tests exercise real I/O and temporarily change input configuration,
+sensitivity, filters, reference and auxiliary outputs, displays, and local mode.
+Fixtures attempt to restore changed properties even after failed assertions;
+cleanup failures are reported. Connection initialization enables status registers,
+status queries clear latched events, and disconnect returns the front panel to
+local mode. Buffer tests stop acquisition and erase the existing trace buffers;
+previous buffer contents and scan activity cannot be restored.
+
+The virtual driver supplies dummy measurements and buffers. A default passing run
+checks interface behavior, not calibrated measurement accuracy or real transport
+compatibility. Physical signal accuracy requires a known signal and a hardware run.
+
+## Selection and coverage
+
+```sh
+python -m pytest -m unit
+python -m pytest -m integration
+python -m pytest -m hardware --resource-name "GPIB0::8::INSTR"
+python -m pytest --cov --cov-report=term-missing
+```
+
+Without a resource, `hardware` selects only the skipped register tests. With a
+resource, all integration tests are marked `hardware`. Collection and `--help`
+never connect an instrument. Avoid parallel execution against a single physical
+instrument; changing its settings from multiple tests concurrently is unsupported.

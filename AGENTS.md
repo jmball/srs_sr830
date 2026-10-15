@@ -13,7 +13,6 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
 - Each package's `__init__.py` exports its implementation and obtains a version
   through `importlib.metadata` for the `srs_sr830` distribution, falling back to
   `0.0.0`.
-- `src/sr830/test_sr830.py`: existing hardware integration tests.
 - `examples/logging.py`: logging and serial connection example. Running it
   opens a real resource.
 - `src/sr830/_connection.py`: shared interface inference and framing validation.
@@ -21,12 +20,15 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
   meanings, and private protocol mappings/validation shared by both drivers.
   Enum values are instrument command codes, not physical values. There is no
   `_Settings` base class or legacy value/description tables.
-- `tests/test_connection.py`: hardware-free lifecycle and annotation checks,
-  run with `python -m unittest discover -s tests`.
-- `tests/test_settings.py`: enum and integer compatibility checks.
-- `tests/test_enums.py`: exhaustive named-code, selector, annotation, and status
-  bit/mask compatibility checks.
-- `tests/test_logging.py`: logging/warning policy and status-decoding checks.
+- `tests/unit/`: native pytest unit tests for connections, I/O, enums, logging,
+  and test-fixture behavior. They use fake VISA resources and never open hardware.
+- `tests/integration/`: public-interface setting, measurement, buffer, and status
+  tests. These use VirtualSR830 unless --resource-name selects real hardware.
+- `tests/conftest.py`: CLI options, backend selection, markers, and integration
+  fixtures. `tests/unit/conftest.py` contains fresh unit-test mocks.
+- `tests/support.py`: shared connection options and cleanup/restoration helpers.
+- `tests/cases.py`: shared setting/command cases; do not import another test module.
+- `tests/README.md`: test commands, hardware options, and virtual limitations.
 - `pyproject.toml`: package metadata, package discovery, runtime dependencies
   (`pyvisa` and `pyvisa-py`), and the setuptools build backend. Keep installation
   configuration here; there is no `setup.cfg` or `setup.py`.
@@ -82,13 +84,13 @@ Use an isolated environment when dependencies are needed:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/python -m pip install -e .
+.venv/bin/python -m pip install -e ".[test]"
 ```
 
 A syntax check that does not open hardware is:
 
 ```sh
-python3 -m compileall -q src examples
+python3 -m compileall -q src tests examples
 ```
 
 For driver behavior changes, prefer focused checks using a fake VISA resource
@@ -96,14 +98,22 @@ or the virtual instrument. Verify relevant commands, conversions, valid range
 boundaries, and invalid values. Report which checks ran and whether hardware
 behavior remains unverified.
 
-Do not run blanket `pytest` collection as a default check. The existing test
-module imports legacy `visa`, requires `numpy` and `pytest` (not declared as
-runtime dependencies), and calls `argparse.parse_args()` at import time, which
-can conflict with pytest arguments. It uses one global instrument and depends
-on connection/reset/disconnection tests and instrument state. Its property
-helpers assign local values rather than invoking the actual property setters,
-so they do not establish setter correctness. Inspect and address these issues
-before relying on this suite.
+Use `python -m pytest` for normal validation; tests are discovered only under
+`tests/`. `python -m pytest -m unit` selects isolated tests, and
+`python -m pytest --cov --cov-report=term-missing` reports line/branch coverage.
+Test dependencies are declared in the `test` extra in pyproject.toml. Keep tests
+as pytest functions using fixtures, parametrization, and plain assertions.
+There is no legacy test module in src and no import-time argument parsing.
+
+Integration fixtures create fresh connections and restore changed properties even
+when tests fail. Supplying --resource-name selects real hardware; a connection
+failure must fail rather than silently fall back to virtual. Optional arguments
+include --visa-backend, --output-interface, --visa-timeout (ms), serial framing,
+and --acquisition-timeout (seconds). Spell the backend as --visa-backend=@py;
+pytest treats a standalone @py as an argument-file reference. Real buffer tests
+pause and clear acquisition buffers. Hardware-only status tests skip without a
+resource because virtual register getters are unimplemented. Verify fixture
+selection/cleanup with fake resources; do not claim virtual runs validate hardware.
 
 Real hardware runs require a user-provided VISA resource and appropriate
 authorization to change its settings. `connect()` never resets the instrument;

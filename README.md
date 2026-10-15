@@ -215,8 +215,35 @@ see the [SR830 status-register documentation](https://www.thinksrs.com/downloads
 The [logging example](examples/logging.py) configures output and warning capture
 at the application level.
 
-Hardware-free connection, settings, and logging tests can be run with:
+## Testing
+
+Install the test dependencies and run pytest:
 
 ```sh
-python -m unittest discover -s tests
+python -m pip install -e ".[test]"
+python -m pytest
+```
+
+`tests/unit/` uses fake VISA resources. `tests/integration/` exercises the public
+interface on `VirtualSR830` by default; hardware-only register tests are skipped.
+To run the integration tests against a real instrument:
+
+```sh
+python -m pytest tests/integration --resource-name "ASRL2::INSTR" \
+    --visa-backend=@py --baud-rate 9600 --data-bits 8 --parity none --stop-bits 1
+```
+
+For adapters whose instrument-side interface is ambiguous, supply
+`--output-interface 0` (RS232) or `--output-interface 1` (GPIB). Use
+`--visa-backend=@py` with the equals sign because pytest interprets standalone
+`@...` arguments as argument files. `python -m pytest --help` lists all options.
+
+Hardware runs temporarily change settings and outputs, and buffer tests pause
+acquisition and clear existing buffers. Changed properties are restored on exit;
+previous acquisition data and scan activity cannot be restored. See the
+[test guide](tests/README.md) for the layout, hardware options, and limitations.
+
+```sh
+python -m pytest -m unit
+python -m pytest --cov --cov-report=term-missing
 ```
