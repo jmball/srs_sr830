@@ -1,16 +1,20 @@
 """Deterministic signal, acquisition, and status behavior without hardware."""
 
 import math
+import struct
 
 import pytest
 
 from sr830 import (
     Channel1Display,
     Channel1Ratio,
+    Channel2Display,
+    Channel2Ratio,
     DataTransferMode,
     EndOfBufferMode,
     ErrorFlag,
     InputConfiguration,
+    LiaStatusFlag,
     LowPassFilterSlope,
     MeasurementParameter,
     OutputExpansion,
@@ -26,13 +30,6 @@ from sr830 import (
     TriggerStartMode,
 )
 from virtual_sr830 import VirtualSR830
-
-
-@pytest.fixture
-def simulation():
-    instrument = VirtualSR830(clock=lambda: 0.0)
-    instrument.connect("GPIB0::8::INSTR")
-    return instrument
 
 
 def test_simulation_requires_connection_and_preserves_state_across_reconnect():
@@ -88,6 +85,69 @@ def test_offsets_do_not_change_r_or_phase_and_expansion_does_not_scale_display(
     assert simulation.read_display(1) == pytest.approx(100)  # ratio clips at 100%
     simulation.set_output_offset_expand(OutputParameter.X, 20, OutputExpansion.x1)
     assert simulation.read_display(1) == pytest.approx(5)
+
+
+@pytest.mark.parametrize(
+    "channel, display, ratio, expected",
+    [
+        (1, Channel1Display.R, Channel1Ratio.NONE, 0.005),
+        (2, Channel2Display.PHASE, Channel2Ratio.NONE, 53.1301023542),
+        (1, Channel1Display.X_NOISE, Channel1Ratio.NONE, 0.0),
+        (2, Channel2Display.Y_NOISE, Channel2Ratio.NONE, 0.0),
+    ],
+    ids=["ch1-r", "ch2-phase", "ch1-ideal-noise", "ch2-ideal-noise"],
+)
+def test_display_quantities(simulation, channel, display, ratio, expected):
+    simulation.set_signal(0.003, 0.004, settle=True)
+    simulation.set_display(channel, display, ratio)
+    assert simulation.read_display(channel) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    "channel, display, ratio, aux_channel, expected",
+    [
+        (1, Channel1Display.X, Channel1Ratio.AUX_IN_1, 1, 0.15),
+        (1, Channel1Display.X, Channel1Ratio.AUX_IN_2, 2, 0.15),
+        (2, Channel2Display.Y, Channel2Ratio.AUX_IN_3, 3, 0.2),
+        (2, Channel2Display.Y, Channel2Ratio.AUX_IN_4, 4, 0.2),
+    ],
+    ids=["ch1-aux1", "ch1-aux2", "ch2-aux3", "ch2-aux4"],
+)
+def test_display_ratios_use_channel_aux_inputs(
+    simulation, channel, display, ratio, aux_channel, expected
+):
+    simulation.set_signal(0.003, 0.004, settle=True)
+    simulation.set_aux_input(aux_channel, 2)
+    simulation.set_display(channel, display, ratio)
+    assert simulation.read_display(channel) == pytest.approx(expected)
+
+
+def test_zero_display_ratio_denominator_sets_overload(simulation):
+    simulation.set_signal(0.003, settle=True)
+    simulation.set_display(1, Channel1Display.X, Channel1Ratio.AUX_IN_1)
+    assert simulation.read_display(1) == 0
+    status = simulation.get_status_byte(StatusRegister.LIA_STATUS)
+    assert status & LiaStatusFlag.OUTPUT_OVERLOAD
+
+
+def test_snap_includes_reference_frequency(simulation):
+    simulation.reference_frequency = 1234.5
+    values = simulation.measure_multiple(
+        [MeasurementParameter.REFERENCE_FREQUENCY, MeasurementParameter.X]
+    )
+    assert tuple(values) == (1234.5, 0.001)
+
+
+def test_harmonic_is_clamped_to_detection_frequency_limit(simulation):
+    simulation.reference_frequency = 1000
+    simulation.harmonic = 200
+    assert simulation.harmonic == 102
+
+
+def test_switching_to_current_sensitivity_clamps_input_configuration(simulation):
+    simulation.input_configuration = InputConfiguration.CURRENT_100_MOHM
+    simulation.sensitivity = Sensitivity.x20m
+    assert simulation.input_configuration == InputConfiguration.CURRENT_1_MOHM
 
 
 def test_auxiliary_inputs_are_independent_of_outputs(simulation):
@@ -278,6 +338,27 @@ def test_fast_stream_uses_counts_and_delayed_start(simulation, mode):
     assert simulation._simulation.fast == simulation._simulation.fast.__class__()
 
 
+def test_fast_data_sets_message_available_status(simulation):
+    simulation.sample_rate = SampleRate.Hz_16
+    simulation.data_transfer_mode = DataTransferMode.DOS
+    simulation.start()
+    assert not simulation.serial_poll() & SerialPollFlag.MESSAGE_AVAILABLE
+    simulation.advance_time(0.625)
+    assert simulation.serial_poll() & SerialPollFlag.MESSAGE_AVAILABLE
+    simulation.pause()
+
+
+def test_non_normalized_mantissa_rounding_overflow_is_renormalized(simulation):
+    # This value rounds the 15-bit mantissa up to 32768 before normalization.
+    sample = math.nextafter(2.0, 0.0)
+    simulation._simulation.buffers[0].append(sample)
+    raw = simulation._simulation.buffer_bytes("TRCL? 1,0,1")
+    mantissa, exponent = struct.unpack("<hh", raw)
+    assert mantissa == 16384
+    assert exponent == 111
+    assert mantissa * 2 ** (exponent - 124) == pytest.approx(sample)
+
+
 def test_fast_counts_include_expansion_and_current_units(simulation):
     simulation.input_configuration = InputConfiguration.CURRENT_1_MOHM
     simulation.sensitivity = Sensitivity.x10m  # 10 nA full scale
@@ -347,3 +428,121 @@ def test_disconnect_clears_connection_even_if_signal_callback_fails():
     simulation.disconnect()
     with pytest.raises(RuntimeError, match="not connected"):
         simulation.idn
+
+
+@pytest.mark.parametrize(
+    "channel,display,ratio,expected",
+    [
+        pytest.param(
+            1, Channel1Display.R, Channel1Ratio.AUX_IN_1, 2.5, id="expanded-r"
+        ),
+        pytest.param(
+            2,
+            Channel2Display.PHASE,
+            Channel2Ratio.AUX_IN_3,
+            math.degrees(math.atan2(0.004, 0.003)) / 180 * 50,
+            id="phase",
+        ),
+        pytest.param(
+            1, Channel1Display.AUX_IN_2, Channel1Ratio.AUX_IN_1, 20, id="aux-voltage"
+        ),
+        pytest.param(
+            1, Channel1Display.X_NOISE, Channel1Ratio.AUX_IN_1, 0, id="ideal-noise"
+        ),
+    ],
+)
+def test_ratio_scales_match_display_units(
+    simulation, channel, display, ratio, expected
+):
+    simulation.set_signal(0.003, 0.004, settle=True)
+    simulation.set_aux_input(1, 2)
+    simulation.set_aux_input(2, 4)
+    simulation.set_aux_input(3, 2)
+    simulation.set_output_offset_expand(OutputParameter.R, 0, OutputExpansion.x10)
+    simulation.set_display(channel, display, ratio)
+    assert simulation.read_display(channel) == pytest.approx(expected)
+
+
+def test_harmonic_is_preserved_with_an_unlocked_reference(simulation):
+    simulation.reference_source = ReferenceSource.EXTERNAL
+    simulation.set_external_reference(1000, locked=False)
+    simulation.harmonic = 200
+    assert simulation.harmonic == 200
+
+
+def test_repeated_start_does_not_reset_sample_timing(simulation):
+    simulation.sample_rate = SampleRate.Hz_1
+    simulation.start()
+    simulation.advance_time(0.5)
+    simulation.start()
+    simulation.advance_time(0.5)
+    assert simulation.buffer_size == 1
+
+
+def test_trigger_without_start_mode_latches_event_without_starting_scan(simulation):
+    simulation.trigger()
+    assert simulation.buffer_size == 0
+    assert simulation.serial_poll() & SerialPollFlag.NO_SCAN_IN_PROGRESS
+    assert simulation.get_status_byte(StatusRegister.LIA_STATUS) & LiaStatusFlag.TRIGGER
+
+
+def test_virtual_manager_resolves_alias_without_opening_resource(manager):
+    simulation = VirtualSR830(clock=lambda: 0.0)
+    simulation.connect("serial-alias", resource_manager=manager)
+    assert simulation.output_interface == 0
+    manager.resource_info.assert_called_once_with("serial-alias")
+    manager.open_resource.assert_not_called()
+    simulation.disconnect()
+    manager.close.assert_not_called()
+
+
+@pytest.mark.parametrize("method", ["_write", "_query"])
+def test_unsupported_virtual_commands_report_errors(simulation, method):
+    with pytest.raises(ValueError, match="Unsupported virtual"):
+        getattr(simulation, method)("UNKNOWN")
+    if method == "_write":
+        assert (
+            simulation.get_status_byte(StatusRegister.STANDARD_EVENT)
+            & StandardEventFlag.COMMAND_ERROR
+        )
+
+
+def test_virtual_binary_reader_rejects_short_response(simulation):
+    simulation.sample_rate = SampleRate.Hz_1
+    simulation.start()
+    simulation.advance_time(1)
+    simulation.pause()
+    with pytest.raises(OSError, match="Incomplete virtual"):
+        simulation._read_buffer_bytes("TRCB? 1,0,2", 8)
+
+
+def test_virtual_stream_rejects_interface_change(simulation):
+    simulation.data_transfer_mode = DataTransferMode.DOS
+    simulation.start()
+    with pytest.raises(RuntimeError, match="Stop fast transfer"):
+        simulation.output_interface = 0
+    simulation.pause()
+
+
+@pytest.mark.parametrize(
+    "method,args,kwargs",
+    [
+        pytest.param("set_signal", (0,), {"settle": 1}, id="settle-not-bool"),
+        pytest.param(
+            "set_external_reference", (1000,), {"locked": 1}, id="locked-not-bool"
+        ),
+    ],
+)
+def test_simulation_boolean_options_are_strict(simulation, method, args, kwargs):
+    with pytest.raises(ValueError, match="must be a bool"):
+        getattr(simulation, method)(*args, **kwargs)
+
+
+def test_fast_read_deadline_precedes_first_sample(simulation):
+    simulation.data_transfer_mode = DataTransferMode.DOS
+    simulation.sample_rate = SampleRate.Hz_16
+    simulation.start()
+    with pytest.raises(TimeoutError):
+        simulation.read_fast_data(1, timeout=0.1)
+    assert not simulation._simulation.running
+    assert simulation.idn

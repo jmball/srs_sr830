@@ -189,19 +189,16 @@ class VirtualSR830(SR830):
             if self._simulation.fast:
                 result.extend(struct.pack("<hh", *self._simulation.fast.popleft()))
                 continue
+            now = self._simulation.now()
+            remaining = deadline - now
             if (
-                self._simulation.now() >= deadline
+                remaining <= 0
                 or not self._simulation.running
                 or self._simulation.settings["SRAT"] == 14
             ):
                 raise TimeoutError("No virtual fast-transfer samples before timeout.")
             rate = 0.0625 * 2 ** int(self._simulation.settings["SRAT"])
-            delay = max(
-                0.0, self._simulation.last_sample + 1 / rate - self._simulation.now()
-            )
-            remaining = max(0.0, deadline - self._simulation.now())
-            if remaining == 0:
-                raise TimeoutError("No virtual fast-transfer samples before timeout.")
+            delay = max(0.0, self._simulation.last_sample + 1 / rate - now)
             self.advance_time(min(max(delay, 1e-9), remaining))
         return bytes(result)
 

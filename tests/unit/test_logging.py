@@ -96,12 +96,12 @@ def test_propagated_initialization_failure_is_not_logged_as_an_error(
     resource.close.assert_called_once()
 
 
-def test_serial_binary_warnings_identify_the_caller(driver, resource):
+def test_serial_binary_warnings_identify_the_caller(driver, resource, query_replies):
     driver._instr = resource
     resource.read_termination = "\r"
     resource.read_bytes.return_value = b"\x00" * 4
     for reader in (driver.get_binary_buffer_data, driver.get_non_norm_buffer_data):
-        resource.query.side_effect = ["0", "1", "0"]
+        query_replies.update({"SEND?": "0", "SPTS?": "1", "OUTX?": "0"})
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
             expected_line = inspect.currentframe().f_lineno + 1

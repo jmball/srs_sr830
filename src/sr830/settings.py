@@ -546,29 +546,32 @@ def _validate_enum(value: object, expected: type[Enum]) -> None:
         )
 
 
-def _validate_register_bit(register: str, bit: object) -> None:
-    """Validate an enum bit position against its register; integers remain valid."""
+def _validate_register(register: str) -> None:
+    """Share register-name validation across register operations."""
     _validate_enum(register, StatusRegister)
+    if register not in _REGISTER_BITS:
+        raise ValueError(
+            f"Invalid register: {register}. Must be one of {', '.join(_REGISTER_BITS)}."
+        )
+
+
+def _validate_register_bit(register: str, bit: int | None) -> None:
+    """Validate an optional bit position against its register."""
+    _validate_register(register)
     if bit is not None:
-        _require_integer(bit, "bit")
-        if not isinstance(bit, Integral) or not 0 <= int(bit) <= 7:
-            raise ValueError("bit must be in range 0 to 7.")
-    if register in _REGISTER_BITS:
         _validate_enum(bit, _REGISTER_BITS[register])
+        if not 0 <= bit <= 7:
+            raise ValueError("bit must be in range 0 to 7.")
 
 
-def _validate_register_value(register: str, value: object, decimal: bool) -> None:
-    """Validate masks for whole-byte writes and switch states for bit writes."""
-    _validate_enum(register, StatusRegister)
+def _validate_register_value(register: str, value: int, decimal: bool) -> None:
+    """Validate whole-byte masks or single-bit switch states."""
+    _validate_register(register)
     if not isinstance(decimal, bool):
         raise ValueError("decimal must be a bool.")
-    _require_integer(value, "value")
-    if not isinstance(value, Integral) or not 0 <= int(value) <= (
-        255 if decimal else 1
-    ):
+    _validate_enum(value, _REGISTER_FLAGS[register] if decimal else SwitchState)
+    if value is None or not 0 <= value <= (255 if decimal else 1):
         raise ValueError("value must be 0 to 255 for a mask, or 0/1 for a bit.")
-    if register in _REGISTER_FLAGS:
-        _validate_enum(value, _REGISTER_FLAGS[register] if decimal else SwitchState)
 
 
 def _require_integer(value: object, name: str) -> None:

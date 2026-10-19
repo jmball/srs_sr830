@@ -22,12 +22,14 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
   Enum values are instrument command codes, not physical values. There is no
   `_Settings` base class or legacy value/description tables.
 - `tests/unit/`: native pytest unit tests for connections, I/O, enums, logging,
-  and test-fixture behavior. They use fake VISA resources and never open hardware.
+  and test-fixture behavior. Tests are grouped by validation, connections, buffers,
+  FAST transfers, waiting, and simulation. They never open hardware.
 - `tests/integration/`: public-interface setting, measurement, buffer, and status
   tests. These use VirtualSR830 unless --resource-name selects real hardware.
 - `tests/conftest.py`: CLI options, backend selection, markers, and integration
   fixtures. `tests/unit/conftest.py` contains fresh unit-test mocks.
-- `tests/support.py`: shared connection options and cleanup/restoration helpers.
+- `tests/support.py`: shared connection options, cleanup/restoration helpers, and
+  ManualClock for deterministic completion/settling tests.
 - `tests/cases.py`: shared setting/command cases; do not import another test module.
 - `tests/README.md`: test commands, hardware options, and virtual limitations.
 - `pyproject.toml`: package metadata, package discovery, runtime dependencies
@@ -107,6 +109,9 @@ Use `uv run --locked pytest` for normal validation; tests are discovered only un
 Development dependencies are declared in the `dev` dependency group in pyproject.toml. Keep tests
 as pytest functions using fixtures, parametrization, and plain assertions.
 There is no legacy test module in src and no import-time argument parsing.
+Use query_replies to map stable VISA query responses by command; reserve ordered
+side_effect lists for intentionally changing replies or query-order assertions.
+Keep validation in shared helpers instead of repeating checks inside register methods.
 
 Use `uv add --dev` for development tools, `uv add` for runtime dependencies,
 and `uv lock --upgrade-package` for targeted updates. Commit pyproject.toml and

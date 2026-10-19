@@ -3,7 +3,6 @@
 import pytest
 from enum import IntEnum, IntFlag
 import inspect
-import struct
 import typing
 from unittest.mock import patch
 import sr830
@@ -84,9 +83,9 @@ def test_numeric_names_and_instrument_codes():
 
 
 def test_numeric_invalid_codes_and_wrong_enum_classes(
-    mock_instrument, resource, virtual
+    mock_instrument, resource, simulation
 ):
-    for driver in (mock_instrument, virtual):
+    for driver in (mock_instrument, simulation):
         for name, enum, command in NUMERIC_PROPERTIES:
             for value in (-1, len(enum), settings.ReferenceSource.INTERNAL):
                 with pytest.raises(ValueError):
@@ -96,8 +95,8 @@ def test_numeric_invalid_codes_and_wrong_enum_classes(
     resource.write.assert_not_called()
 
 
-def test_display_enums_are_checked_against_channel(mock_instrument, resource, virtual):
-    for driver in (mock_instrument, virtual):
+def test_display_enums_are_checked_against_channel(mock_instrument, resource, simulation):
+    for driver in (mock_instrument, simulation):
         for channel, displays, ratios in (
             (settings.Channel.CH1, settings.Channel1Display, settings.Channel1Ratio),
             (settings.Channel.CH2, settings.Channel2Display, settings.Channel2Ratio),
@@ -121,10 +120,10 @@ def test_display_enums_are_checked_against_channel(mock_instrument, resource, vi
             )
 
 
-def test_output_expansion_and_parameter_codes(mock_instrument, resource, virtual):
+def test_output_expansion_and_parameter_codes(mock_instrument, resource, simulation):
     for parameter in settings.OutputParameter:
         for expand in settings.OutputExpansion:
-            for driver in (mock_instrument, virtual):
+            for driver in (mock_instrument, simulation):
                 driver.set_output_offset_expand(parameter, 12.5, expand)
                 if driver is mock_instrument:
                     resource.write.assert_called_with(
@@ -136,66 +135,18 @@ def test_output_expansion_and_parameter_codes(mock_instrument, resource, virtual
                 driver.auto_offset(parameter)
             resource.write.assert_called_with(f"AOFF {int(parameter)}")
     assert [int(x) for x in settings.OutputExpansion] == [0, 1, 2]
-    for driver in (mock_instrument, virtual):
+    for driver in (mock_instrument, simulation):
         for operation in (driver.get_output_offset_expand, driver.auto_offset):
             with pytest.raises(ValueError):
                 operation(0)
 
 
-def test_buffer_readers_accept_channel_enums_and_reject_zero(
-    mock_instrument, resource, virtual
-):
-    for driver in (mock_instrument, virtual):
-        for method in (
-            driver.get_ascii_buffer_data,
-            driver.get_binary_buffer_data,
-            driver.get_non_norm_buffer_data,
-        ):
-            with pytest.raises(ValueError):
-                method(0, 0, 1)
-    resource.query.side_effect = ["0", "1", "0", "1"]
-    resource.query_ascii_values.return_value = ["1.5", ""]
-    for channel in settings.Channel:
-        assert mock_instrument.get_ascii_buffer_data(channel, 0, 1) == (1.5,)
-        assert resource.query_ascii_values.call_args.args == (
-            f"TRCA? {int(channel)},0,1",
-        )
-
-
-def test_loop_buffer_readers_use_enum_modes_without_legacy_tables(
-    mock_instrument, resource
-):
-    readers = (
-        (mock_instrument.get_ascii_buffer_data, "TRCA?", None),
-        (mock_instrument.get_binary_buffer_data, "TRCB?", struct.pack("<f", 1.25)),
-        (
-            mock_instrument.get_non_norm_buffer_data,
-            "TRCL?",
-            struct.pack("<hh", 10, 124),
-        ),
-    )
-    resource.read_termination = "\n"
-    for reader, command, raw in readers:
-        resource.write.reset_mock()
-        resource.query.side_effect = ["1", "1"] if raw is None else ["1", "1", "1"]
-        resource.query_ascii_values.return_value = ["1.25", ""]
-        resource.read_bytes.return_value = raw
-        result = reader(settings.Channel.CH2, 0, 1)
-        assert result == ((10.0,) if command == "TRCL?" else (1.25,))
-        commands = [call.args[0] for call in resource.write.call_args_list]
-        assert commands[0] == "PAUS"
-        assert "SEND 1" not in commands
-        assert "STRT" not in commands
-        if raw is not None:
-            assert f"{command} 2,0,1" in commands
-
-
 def test_measurement_selectors_and_integer_serialization(
-    mock_instrument, resource, virtual
+    mock_instrument, resource, simulation
 ):
     resource.query.return_value = "1.25"
     for parameter in settings.MeasurementParameter:
-        for driver in (mock_instrument, virtual):
+        for driver in (mock_instrument, simulation):
             if int(parameter) <= 4:
                 driver.measure(parameter)
             else:
@@ -215,7 +166,7 @@ def test_measurement_selectors_and_integer_serialization(
                 )
             ) == (1.0, 2.0)
             resource.query.assert_called_with(f"SNAP? 1,{int(second)}")
-    for driver in (mock_instrument, virtual):
+    for driver in (mock_instrument, simulation):
         with pytest.raises(ValueError):
             driver.measure(settings.OutputParameter.X)
         with pytest.raises(ValueError):
@@ -224,31 +175,31 @@ def test_measurement_selectors_and_integer_serialization(
             )
 
 
-def test_channel_and_auxiliary_selectors(mock_instrument, resource, virtual):
+def test_channel_and_auxiliary_selectors(mock_instrument, resource, simulation):
     resource.query.return_value = "1"
     for channel in settings.Channel:
-        for driver in (mock_instrument, virtual):
+        for driver in (mock_instrument, simulation):
             driver.read_display(channel)
             driver.set_front_output(channel, settings.FrontPanelOutputSource.COMPONENT)
             driver.get_front_output(channel)
         resource.write.assert_called_with(f"FPOP {int(channel)}, 1")
     for channel in settings.AuxiliaryChannel:
-        for driver in (mock_instrument, virtual):
+        for driver in (mock_instrument, simulation):
             driver.set_aux_out(channel, 0.5)
             driver.get_aux_out(channel)
             driver.get_aux_in(channel)
         resource.write.assert_called_with(f"AUXV {int(channel)}, 0.5")
-    for driver in (mock_instrument, virtual):
+    for driver in (mock_instrument, simulation):
         with pytest.raises(ValueError):
             driver.read_display(settings.AuxiliaryChannel.AUX1)
 
 
-def test_register_names_positions_and_masks(mock_instrument, resource, virtual):
+def test_register_names_positions_and_masks(mock_instrument, resource, simulation):
     for register, bits, flags, enable_command, status_query in REGISTER_TYPES:
         for bit in bits:
             mask = flags[bit.name]
             assert int(mask) == 1 << int(bit)
-            for driver in (mock_instrument, virtual):
+            for driver in (mock_instrument, simulation):
                 driver.set_enable_register(register, mask)
                 driver.set_enable_register(
                     register, settings.SwitchState.ON, decimal=False, bit=bit
@@ -259,8 +210,8 @@ def test_register_names_positions_and_masks(mock_instrument, resource, virtual):
             resource.query.assert_called_with(f"{enable_command}? {int(bit)}")
             assert mock_instrument.get_status_byte(register, bit) == 1
             resource.query.assert_called_with(f"{status_query} {int(bit)}")
-            assert virtual.get_enable_register(register, bit) == 1
-            assert virtual.get_status_byte(register, bit) in (0, 1)
+            assert simulation.get_enable_register(register, bit) == 1
+            assert simulation.get_status_byte(register, bit) in (0, 1)
         members = list(flags)
         combined = members[0] | members[-1]
         mock_instrument.set_enable_register(register, combined)
@@ -270,9 +221,9 @@ def test_register_names_positions_and_masks(mock_instrument, resource, virtual):
 
 
 def test_register_masks_positions_and_registers_cannot_be_mixed(
-    mock_instrument, resource, virtual
+    mock_instrument, resource, simulation
 ):
-    for driver in (mock_instrument, virtual):
+    for driver in (mock_instrument, simulation):
         for operation in (
             lambda: driver.get_status_byte(
                 settings.StatusRegister.ERROR, settings.SerialPollBit.ERROR
@@ -309,3 +260,13 @@ def test_annotations_expose_enum_inputs_and_integer_getters():
             assert set(typing.get_args(parameter)) == {enum, int}
             assert typing.get_type_hints(getattr(cls, name).fget)["return"] is int
         assert inspect.signature(cls.connect) == inspect.signature(sr830.SR830.connect)
+
+
+def test_enable_all_status_bytes_writes_all_four_registers(mock_instrument, resource):
+    mock_instrument.enable_all_status_bytes()
+    assert [call.args[0] for call in resource.write.call_args_list] == [
+        "*ESE 255",
+        "*SRE 255",
+        "ERRE 255",
+        "LIAE 255",
+    ]

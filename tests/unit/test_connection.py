@@ -2,12 +2,10 @@
 
 import pytest
 import inspect
-import struct
-import warnings
 import typing
 from unittest.mock import Mock, PropertyMock, patch
 import pyvisa
-from pyvisa.constants import InterfaceType, SerialTermination
+from pyvisa.constants import InterfaceType
 from sr830 import SR830
 from virtual_sr830 import VirtualSR830
 
@@ -250,16 +248,6 @@ def test_io_helpers_preserve_visa_errors(connect, driver, resource):
         method.side_effect = None
 
 
-def test_ascii_buffer_uses_guarded_query_and_preserves_parsing(
-    connect, driver, resource
-):
-    connect()
-    resource.query.side_effect = ["0", "2"]
-    resource.query_ascii_values.return_value = ["1.25", "-2.5", ""]
-    assert driver.get_ascii_buffer_data(1, 0, 2) == (1.25, -2.5)
-    assert resource.query_ascii_values.call_args.args == ("TRCA? 1,0,2",)
-
-
 def test_virtual_connection_matches_api_and_preserves_settings():
     for name, interface in (("ASRL1::INSTR", 0), ("GPIB0::14::INSTR", 1)):
         virtual = VirtualSR830()
@@ -324,48 +312,6 @@ def test_set_enable_register_requires_bit_for_binary_values(connect, driver, res
     resource.write.assert_any_call("ERRE 3,1")
 
 
-def test_binary_buffers_ignore_text_terminators_and_restore_framing(
-    connect, driver, resource
-):
-    connect()
-    original_end = resource.end_input
-    raw = bytes([13, 10, 128, 63])
-
-    def read(size, **kwargs):
-        assert size == 4
-        assert kwargs == {"break_on_termchar": False}
-        assert resource.read_termination is None
-        assert resource.end_input == SerialTermination.none
-        return raw
-
-    resource.read_bytes.side_effect = read
-    resource.query.side_effect = ["0", "1", "0"]
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        assert driver.get_binary_buffer_data(1, 0, 1) == struct.unpack("<f", raw)
-    resource.write.assert_any_call("TRCB? 1,0,1")
-    assert resource.read_termination == "\r"
-    assert resource.end_input == original_end
-    resource.read_bytes.side_effect = None
-    resource.read_bytes.return_value = struct.pack("<hh", 10, 124)
-    resource.query.side_effect = ["0", "1", "0"]
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        assert driver.get_non_norm_buffer_data(1, 0, 1) == (10.0,)
-    resource.write.assert_any_call("TRCL? 1,0,1")
-
-
-def test_binary_read_failure_restores_text_framing(connect, driver, resource):
-    connect()
-    original_end = resource.end_input
-    resource.query.side_effect = ["1", "1", "0"]
-    resource.read_bytes.side_effect = OSError("read failed")
-    with pytest.raises(OSError, match="read failed"):
-        driver.get_binary_buffer_data(1, 0, 1)
-    assert resource.read_termination == "\r"
-    assert resource.end_input == original_end
-
-
 def test_all_driver_methods_have_resolvable_annotations():
     for cls in (SR830, VirtualSR830):
         assert inspect.signature(cls.connect) == inspect.signature(SR830.connect)
@@ -379,3 +325,25 @@ def test_all_driver_methods_have_resolvable_annotations():
                 for parameter in inspect.signature(function).parameters:
                     if parameter != "self":
                         assert parameter in hints, name
+
+
+def test_output_interface_write_failure_restores_framing(connect, driver, resource):
+    connect()
+    resource.write.side_effect = OSError("failed OUTX")
+    with pytest.raises(OSError, match="failed OUTX"):
+        driver.output_interface = 1
+    assert resource.read_termination == "\r"
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        pytest.param(lambda d: d.serial_poll(), id="native-poll"),
+        pytest.param(lambda d: d.wait_until_ready(), id="wait-ready"),
+        pytest.param(lambda d: d._discard_fast_data(), id="discard-fast"),
+        pytest.param(lambda d: d._read_fast_bytes(4), id="read-fast"),
+    ],
+)
+def test_additional_io_helpers_require_a_connection(driver, operation):
+    with pytest.raises(RuntimeError, match="Instrument is not connected"):
+        operation(driver)

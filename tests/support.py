@@ -69,8 +69,11 @@ def open_instrument(options: InstrumentOptions) -> Iterator[SR830 | VirtualSR830
     """Use a virtual instrument by default; a requested VISA failure stays a failure."""
     if options.resource_name is None:
         with VirtualSR830() as virtual:
-            virtual.connect("ASRL1::INSTR", output_interface=options.output_interface,
-                            **options.resource_kwargs())
+            virtual.connect(
+                "ASRL1::INSTR",
+                output_interface=options.output_interface,
+                **options.resource_kwargs(),
+            )
             yield virtual
         return
 
@@ -101,3 +104,16 @@ def preserve_settings(instrument: object, *names: str) -> Iterator[None]:
         for name in names:
             cleanup.callback(setattr, instrument, name, getattr(instrument, name))
         yield
+
+
+@dataclass
+class ManualClock:
+    """Controllable monotonic seconds for deterministic waiting tests."""
+
+    now: float = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds

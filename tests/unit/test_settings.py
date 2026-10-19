@@ -31,7 +31,7 @@ def test_categorical_enums_are_shared_and_use_command_codes(enum):
 )
 @pytest.mark.parametrize("as_integer", [False, True], ids=["enum", "integer"])
 def test_setting_codes_emit_commands_and_return_integers(
-    mock_instrument, resource, virtual, name, member, command, as_integer
+    mock_instrument, resource, simulation, name, member, command, as_integer
 ):
     value = int(member) if as_integer else member
     resource.query.return_value = "1"  # GPIB is required for FAST modes.
@@ -41,8 +41,8 @@ def test_setting_codes_emit_commands_and_return_integers(
     result = getattr(mock_instrument, name)
     assert type(result) is int
     assert result == int(member)
-    setattr(virtual, name, value)
-    result = getattr(virtual, name)
+    setattr(simulation, name, value)
+    result = getattr(simulation, name)
     assert type(result) is int
     assert result == int(member)
 
@@ -62,27 +62,35 @@ def test_invalid_integer_codes_still_raise(driver_class, name, enum, command):
     ],
 )
 def test_display_enums_preserve_integer_tuple_returns(
-    mock_instrument, resource, virtual, channel, display, ratio
+    mock_instrument, resource, simulation, channel, display, ratio
 ):
     mock_instrument.set_display(channel, display, ratio)
     resource.write.assert_called_with(f"DDEF {channel}, {int(display)}, {int(ratio)}")
-    virtual.set_display(channel, display, ratio)
-    result = virtual.get_display(channel)
+    simulation.set_display(channel, display, ratio)
+    result = simulation.get_display(channel)
     assert result == (int(display), int(ratio))
     assert all(type(value) is int for value in result)
     mock_instrument.set_front_output(channel, settings.FrontPanelOutputSource.COMPONENT)
     resource.write.assert_called_with(f"FPOP {channel}, 1")
-    virtual.set_front_output(channel, settings.FrontPanelOutputSource.COMPONENT)
-    assert type(virtual.get_front_output(channel)) is int
-    assert virtual.get_front_output(channel) == 1
+    simulation.set_front_output(channel, settings.FrontPanelOutputSource.COMPONENT)
+    assert type(simulation.get_front_output(channel)) is int
+    assert simulation.get_front_output(channel) == 1
 
 
-def test_connect_accepts_named_output_interface(virtual):
-    virtual.disconnect()
-    virtual.connect(
+def test_connect_accepts_named_output_interface(simulation):
+    simulation.disconnect()
+    simulation.connect(
         "TCPIP0::example.invalid::1234::SOCKET",
         output_interface=settings.OutputInterface.GPIB,
     )
-    assert type(virtual.output_interface) is int
-    assert virtual.output_interface == 1
-    virtual.disconnect()
+    assert type(simulation.output_interface) is int
+    assert simulation.output_interface == 1
+    simulation.disconnect()
+
+
+def test_harmonic_read_and_write(mock_instrument, resource):
+    mock_instrument.harmonic = 2
+    resource.write.assert_called_once_with("HARM 2")
+    resource.query.return_value = "2"
+    assert mock_instrument.harmonic == 2
+    resource.query.assert_called_once_with("HARM?")

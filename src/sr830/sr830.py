@@ -2101,30 +2101,14 @@ class SR830:
         """
         _validate_register_bit(register, bit)
         _validate_register_value(register, value, decimal)
-        if register in (registers := _ENABLE_REGISTER_COMMANDS.keys()):
-            if decimal is True:
-                if (value >= 0) & (value <= 255):
-                    cmd = f"{_ENABLE_REGISTER_COMMANDS[register]} {int(value)}"
-                else:
-                    raise ValueError(
-                        f"Invalid value: {value}. Must be in range 0 - 255 if decimal."
-                    )
-            else:
-                if bit is not None and 0 <= bit <= 7 and value in (0, 1):
-                    cmd = (
-                        f"{_ENABLE_REGISTER_COMMANDS[register]} {int(bit)},{int(value)}"
-                    )
-                else:
-                    raise ValueError(
-                        f"Invalud bit or value: {bit} or {value}. Bit must in range"
-                        + " 0 - 7 and value must be 0 or 1 if value is not decimal."
-                    )
-            self._write(cmd)
+        command = _ENABLE_REGISTER_COMMANDS[register]
+        if decimal:
+            arguments = str(int(value))
         else:
-            raise ValueError(
-                f"Invalid register: {register}. Must be one of "
-                + f"{', '.join(list(registers))}."
-            )
+            if bit is None:
+                raise ValueError("bit is required when decimal=False.")
+            arguments = f"{int(bit)},{int(value)}"
+        self._write(f"{command} {arguments}")
 
     def get_enable_register(
         self,
@@ -2152,22 +2136,10 @@ class SR830:
             Register value.
         """
         _validate_register_bit(register, bit)
-        if register in (registers := _ENABLE_REGISTER_COMMANDS.keys()):
-            if bit is None:
-                cmd = f"{_ENABLE_REGISTER_COMMANDS[register]}?"
-            else:
-                if (bit >= 0) & (bit <= 7):
-                    cmd = f"{_ENABLE_REGISTER_COMMANDS[register]}? {int(bit)}"
-                else:
-                    raise ValueError(
-                        f"{bit} is out of range. Bit must be in range 0-7 if specified."
-                    )
-            return int(self._query(cmd))
-        else:
-            raise ValueError(
-                f"Invalid register: {register}. Must be one of "
-                + f"{', '.join(list(registers))}."
-            )
+        command = f"{_ENABLE_REGISTER_COMMANDS[register]}?"
+        if bit is not None:
+            command += f" {int(bit)}"
+        return int(self._query(command))
 
     def get_status_byte(
         self,
@@ -2197,22 +2169,10 @@ class SR830:
             Status byte value.
         """
         _validate_register_bit(status_byte, bit)
-        if status_byte in (status_bytes := _STATUS_REGISTER_COMMANDS.keys()):
-            if bit is None:
-                cmd = f"{_STATUS_REGISTER_COMMANDS[status_byte]}"
-            else:
-                if (bit >= 0) & (bit <= 7):
-                    cmd = f"{_STATUS_REGISTER_COMMANDS[status_byte]} {int(bit)}"
-                else:
-                    raise ValueError(
-                        f"{bit} is out of range. Bit must be in range 0-7 if specified."
-                    )
-            return int(self._query(cmd))
-        else:
-            raise ValueError(
-                f"Invalid status byte: {status_byte}. Must be one of "
-                + f"{', '.join(list(status_bytes))}."
-            )
+        command = _STATUS_REGISTER_COMMANDS[status_byte]
+        if bit is not None:
+            command += f" {int(bit)}"
+        return int(self._query(command))
 
     @property
     def power_on_status_clear_bit(self) -> int:

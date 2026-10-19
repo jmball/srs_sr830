@@ -13,10 +13,13 @@ simulated acquisition. No hardware is opened without an explicit resource.
 
 | Location | Purpose |
 | --- | --- |
-| `unit/test_connection.py` | Initialization, cleanup, reconnection, framing, and binary transfers |
+| `unit/test_connection.py` | Initialization, cleanup, reconnection, connection framing, and guarded I/O |
 | `unit/test_settings.py` | Parametrized integer/enum codes, commands, and getter types |
-| `unit/test_enums.py` | Named selectors, enum validation, register masks, and buffer modes |
-| `unit/test_protocol_regressions.py` | Strict integer fields, transfer failures, explicit resume, FAST decoding, and timeout recovery |
+| `unit/test_enums.py` | Named selectors, enum validation, register masks, and annotations |
+| `unit/test_validation.py` | Invalid public arguments and strict integer protocol fields |
+| `unit/test_buffers.py` | All trace formats, range checks, pause/resume, and framing recovery |
+| `unit/test_fast_transfer.py` | FAST decoding, lifecycle guards, and failure cleanup |
+| `unit/test_waiting.py` | Polling, completion/settling budgets, and VISA error propagation |
 | `unit/test_simulation.py` | Deterministic filters, signals, setups, registers, acquisition, and streaming |
 | `unit/test_logging.py` | Library logging policy, warnings, and error decoding |
 | `unit/test_instrument_fixtures.py` | Backend selection, option forwarding, failures, and restoration with fake VISA |
@@ -33,6 +36,18 @@ Tests use pytest functions, fixtures, parametrization, and plain assertions.
 Each test owns its connection and restores the properties it changes, so tests
 can run individually without depending on earlier tests. No test resets the
 instrument to obtain its initial state.
+
+For unit tests, `driver` is disconnected and `mock_instrument` is attached to the
+fake serial `resource`; `gpib_resource` covers GPIB-specific framing paths. The
+`query_replies` fixture maps exact query strings to steady replies, so tests do
+not depend on incidental query order. Unexpected queries fail immediately. Use
+ordered `side_effect` replies only when testing a changing response or the query
+order itself. Keep command and expected-value cases explicit in each test.
+
+Waiting tests use `ManualClock` from `support.py` for monotonic time and sleep.
+Advancing that clock verifies timeout boundaries without real delays. Simulation
+tests share the connected `simulation` fixture, a fixed clock, and the driver's
+`advance_time()` method. Each simulated connection is closed after its test.
 
 ## Real hardware
 
