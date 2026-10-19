@@ -335,7 +335,7 @@ if errors:
 
 Reading `errors` queries status registers and can clear their latched events;
 see the [SR830 status-register documentation](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf).
-The [logging example](examples/logging.py) configures output and warning capture
+The [logging example](examples/connect_with_logging.py) configures output and warning capture
 at the application level.
 
 ## Testing

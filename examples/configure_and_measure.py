@@ -7,14 +7,7 @@ VISA resource selects a real SR830 and changes its measurement settings.
 from __future__ import annotations
 
 import argparse
-import sys
-from pathlib import Path
 from typing import Sequence
-
-if __name__ == "__main__":
-    # Direct script execution puts examples/ first on sys.path, where logging.py
-    # would otherwise shadow Python's standard-library logging module.
-    sys.path[0] = str(Path(__file__).resolve().parents[1])
 
 from sr830 import (
     InputConfiguration,
@@ -109,5 +102,4 @@ def main(argv: Sequence[str] | None = None) -> None:
         manager.close()
 
 
-if __name__ == "__main__":
-    main()
+main()
