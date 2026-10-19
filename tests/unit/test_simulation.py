@@ -1,7 +1,6 @@
 """Deterministic signal, acquisition, and status behavior without hardware."""
 
 import math
-import struct
 
 import pytest
 
@@ -80,6 +79,9 @@ def test_offsets_do_not_change_r_or_phase_and_expansion_does_not_scale_display(
     simulation.set_output_offset_expand(OutputParameter.X, 20, OutputExpansion.x100)
     assert simulation.read_display(1) == pytest.approx(0.001)
     assert simulation.measure(3) == pytest.approx(0.005)
+    assert simulation.measure(4) == pytest.approx(
+        math.degrees(math.atan2(0.004, 0.003))
+    )
     simulation.set_aux_input(1, 2)
     simulation.set_display(1, Channel1Display.X, Channel1Ratio.AUX_IN_1)
     assert simulation.read_display(1) == pytest.approx(100)  # ratio clips at 100%
@@ -328,14 +330,13 @@ def test_fast_stream_uses_counts_and_delayed_start(simulation, mode):
     simulation.data_transfer_mode = mode
     simulation.start()
     simulation.advance_time(0.4)
-    assert not simulation._simulation.fast
+    assert not simulation.serial_poll() & SerialPollFlag.MESSAGE_AVAILABLE
     assert simulation.read_fast_data(2, timeout=0.5) == ((15000, -7500),) * 2
     with pytest.raises(RuntimeError, match="Stop fast"):
         simulation.idn
     simulation.pause()
     assert simulation.buffer_size == 2
     assert simulation.data_transfer_mode == mode
-    assert simulation._simulation.fast == simulation._simulation.fast.__class__()
 
 
 def test_fast_data_sets_message_available_status(simulation):
@@ -348,15 +349,13 @@ def test_fast_data_sets_message_available_status(simulation):
     simulation.pause()
 
 
-def test_non_normalized_mantissa_rounding_overflow_is_renormalized(simulation):
-    # This value rounds the 15-bit mantissa up to 32768 before normalization.
+def test_non_normalized_buffer_handles_mantissa_rounding_boundary(simulation):
     sample = math.nextafter(2.0, 0.0)
-    simulation._simulation.buffers[0].append(sample)
-    raw = simulation._simulation.buffer_bytes("TRCL? 1,0,1")
-    mantissa, exponent = struct.unpack("<hh", raw)
-    assert mantissa == 16384
-    assert exponent == 111
-    assert mantissa * 2 ** (exponent - 124) == pytest.approx(sample)
+    simulation.set_signal(sample, settle=True)
+    simulation.sample_rate = SampleRate.Hz_1
+    simulation.start()
+    simulation.advance_time(1)
+    assert simulation.get_non_norm_buffer_data(1, 0, 1) == pytest.approx((sample,))
 
 
 def test_fast_counts_include_expansion_and_current_units(simulation):
@@ -371,13 +370,15 @@ def test_fast_counts_include_expansion_and_current_units(simulation):
 
 
 def test_fast_timeout_stops_scan_and_keeps_text_usable(simulation):
-    simulation.sample_rate = SampleRate.TRIGGER
+    simulation.sample_rate = SampleRate.Hz_16
     simulation.data_transfer_mode = DataTransferMode.DOS
     simulation.start()
     with pytest.raises(TimeoutError):
         simulation.read_fast_data(1, timeout=0.1)
     assert simulation.idn
-    assert not simulation._simulation.running
+    points = simulation.buffer_size
+    simulation.advance_time(1)
+    assert simulation.buffer_size == points
 
 
 def test_fast2_queue_overflow_latches_error_and_disables_transfer(simulation):
@@ -496,26 +497,6 @@ def test_virtual_manager_resolves_alias_without_opening_resource(manager):
     manager.close.assert_not_called()
 
 
-@pytest.mark.parametrize("method", ["_write", "_query"])
-def test_unsupported_virtual_commands_report_errors(simulation, method):
-    with pytest.raises(ValueError, match="Unsupported virtual"):
-        getattr(simulation, method)("UNKNOWN")
-    if method == "_write":
-        assert (
-            simulation.get_status_byte(StatusRegister.STANDARD_EVENT)
-            & StandardEventFlag.COMMAND_ERROR
-        )
-
-
-def test_virtual_binary_reader_rejects_short_response(simulation):
-    simulation.sample_rate = SampleRate.Hz_1
-    simulation.start()
-    simulation.advance_time(1)
-    simulation.pause()
-    with pytest.raises(OSError, match="Incomplete virtual"):
-        simulation._read_buffer_bytes("TRCB? 1,0,2", 8)
-
-
 def test_virtual_stream_rejects_interface_change(simulation):
     simulation.data_transfer_mode = DataTransferMode.DOS
     simulation.start()
@@ -536,13 +517,3 @@ def test_virtual_stream_rejects_interface_change(simulation):
 def test_simulation_boolean_options_are_strict(simulation, method, args, kwargs):
     with pytest.raises(ValueError, match="must be a bool"):
         getattr(simulation, method)(*args, **kwargs)
-
-
-def test_fast_read_deadline_precedes_first_sample(simulation):
-    simulation.data_transfer_mode = DataTransferMode.DOS
-    simulation.sample_rate = SampleRate.Hz_16
-    simulation.start()
-    with pytest.raises(TimeoutError):
-        simulation.read_fast_data(1, timeout=0.1)
-    assert not simulation._simulation.running
-    assert simulation.idn

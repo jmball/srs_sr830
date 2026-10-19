@@ -2,13 +2,13 @@
 
 import pytest
 
-from tests.cases import SETTING_COMMANDS
+from tests.cases import SETTING_CASES
 
 
-@pytest.mark.parametrize("value", [1.5, 1.0, True, "1"])
-@pytest.mark.parametrize("name,enum,command", SETTING_COMMANDS)
-def test_integer_setting_codes_reject_coercion(
-    mock_instrument, resource, name, enum, command, value
+@pytest.mark.parametrize("name", [name for name, _, _ in SETTING_CASES])
+@pytest.mark.parametrize("value", [1.0, 999], ids=["float-code", "out-of-range"])
+def test_setting_validation_is_applied_before_io(
+    mock_instrument, resource, name, value
 ):
     with pytest.raises(ValueError):
         setattr(mock_instrument, name, value)
@@ -16,23 +16,33 @@ def test_integer_setting_codes_reject_coercion(
     resource.query.assert_not_called()
 
 
-@pytest.mark.parametrize("value", [1.5, 1.0, True, "1"])
+@pytest.mark.parametrize("value", [1.5, 1.0, True, "1", None])
+def test_integer_validation_rejects_coercion(mock_instrument, resource, value):
+    with pytest.raises(ValueError):
+        mock_instrument.sensitivity = value
+    resource.write.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "operation",
     [
         pytest.param(lambda d, v: setattr(d, "harmonic", v), id="harmonic"),
         pytest.param(lambda d, v: d.save_setup(v), id="save-slot"),
         pytest.param(lambda d, v: d.recall_setup(v), id="recall-slot"),
-        pytest.param(lambda d, v: d.set_enable_register("error", v), id="register-mask"),
+        pytest.param(
+            lambda d, v: d.set_enable_register("error", v), id="register-mask"
+        ),
         pytest.param(lambda d, v: d.get_enable_register("error", v), id="enable-bit"),
         pytest.param(lambda d, v: d.get_status_byte("error", v), id="status-bit"),
         pytest.param(lambda d, v: d.get_ascii_buffer_data(1, v, 1), id="trace-start"),
         pytest.param(lambda d, v: d.get_ascii_buffer_data(1, 0, v), id="trace-count"),
     ],
 )
-def test_integer_arguments_reject_coercion(mock_instrument, resource, operation, value):
+def test_integer_argument_validation_is_applied_before_io(
+    mock_instrument, resource, operation
+):
     with pytest.raises(ValueError):
-        operation(mock_instrument, value)
+        operation(mock_instrument, 1.0)
     resource.write.assert_not_called()
     resource.query.assert_not_called()
 
@@ -57,6 +67,9 @@ def test_serial_requires_eight_bits_before_open(connect, manager, bits):
         pytest.param("set_output_offset_expand", (1, -106, 0), {}, id="offset-low"),
         pytest.param("set_output_offset_expand", (1, 106, 0), {}, id="offset-high"),
         pytest.param("set_output_offset_expand", (1, 0, 3), {}, id="expansion-code"),
+        pytest.param("get_output_offset_expand", (0,), {}, id="offset-parameter"),
+        pytest.param("auto_offset", (0,), {}, id="auto-offset-parameter"),
+        pytest.param("measure", (5,), {}, id="measure-selector"),
         pytest.param("get_aux_in", (0,), {}, id="aux-input-channel"),
         pytest.param("set_aux_out", (5, 0), {}, id="aux-output-channel"),
         pytest.param("set_aux_out", (1, -11), {}, id="aux-voltage-low"),
@@ -85,7 +98,9 @@ def test_serial_requires_eight_bits_before_open(connect, manager, bits):
         pytest.param(
             "set_enable_register", ("error", 0), {"decimal": 1}, id="decimal-not-bool"
         ),
-        pytest.param("set_enable_register", ("error", None), {}, id="register-mask-none"),
+        pytest.param(
+            "set_enable_register", ("error", None), {}, id="register-mask-none"
+        ),
         pytest.param("set_enable_register", ("error", -1), {}, id="register-mask-low"),
         pytest.param(
             "set_enable_register", ("error", 256), {}, id="register-mask-high"
@@ -122,3 +137,18 @@ def test_harmonic_out_of_range_fails_before_io(mock_instrument, resource, value)
     with pytest.raises(ValueError):
         mock_instrument.harmonic = value
     resource.write.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "name,value",
+    [
+        ("reference_phase_shift", 721),
+        ("reference_frequency", 102001),
+        ("sine_amplitude", 0),
+    ],
+)
+def test_physical_setting_limits_fail_before_io(mock_instrument, resource, name, value):
+    with pytest.raises(ValueError):
+        setattr(mock_instrument, name, value)
+    resource.write.assert_not_called()
+    resource.query.assert_not_called()

@@ -1,265 +1,157 @@
-"""Named codes, selectors, and register bits without real hardware."""
+"""Enum-specific API behavior: serialization, cross-package inputs, and type safety."""
+
+from unittest.mock import patch
 
 import pytest
-from enum import IntEnum, IntFlag
-import inspect
-import typing
-from unittest.mock import patch
-import sr830
-import sr830.settings as settings
-import virtual_sr830
-from tests.cases import NUMERIC_PROPERTIES
 
-REGISTER_TYPES = (
-    (
-        settings.StatusRegister.STANDARD_EVENT,
-        settings.StandardEventBit,
-        settings.StandardEventFlag,
-        "*ESE",
-        "*ESR?",
-    ),
-    (
-        settings.StatusRegister.SERIAL_POLL,
-        settings.SerialPollBit,
-        settings.SerialPollFlag,
-        "*SRE",
-        "*STB?",
-    ),
-    (
-        settings.StatusRegister.ERROR,
-        settings.ErrorBit,
-        settings.ErrorFlag,
-        "ERRE",
-        "ERRS?",
-    ),
-    (
-        settings.StatusRegister.LIA_STATUS,
-        settings.LiaStatusBit,
-        settings.LiaStatusFlag,
-        "LIAE",
-        "LIAS?",
-    ),
-)
+from sr830 import settings
+from virtual_sr830 import Sensitivity
 
 
-def test_all_enums_are_exported_by_both_packages():
-    for name, enum in vars(settings).items():
-        if (
-            inspect.isclass(enum)
-            and issubclass(enum, (IntEnum, IntFlag, settings.StatusRegister))
-            and (enum.__module__ == settings.__name__)
-        ):
-            assert getattr(sr830, name) is enum
-            assert getattr(virtual_sr830, name) is enum
+def test_virtual_package_enum_is_accepted_by_hardware_driver(mock_instrument, resource):
+    mock_instrument.sensitivity = Sensitivity.x1u
+    resource.write.assert_called_once_with("SENS 8")
 
 
-def test_numeric_names_and_instrument_codes():
-    assert settings.Sensitivity.x1u == 8
-    assert settings.Sensitivity.x200m == 24
-    assert settings.Sensitivity.x1 == 26
-    assert settings.Sensitivity(26) is settings.Sensitivity.x1
-    assert settings.Sensitivity.__members__["x1"] is settings.Sensitivity.x1
-    for enum, count in (
-        (settings.Sensitivity, 27),
-        (settings.TimeConstant, 20),
-        (settings.LowPassFilterSlope, 4),
-        (settings.SampleRate, 15),
-    ):
-        assert [int(member) for member in enum] == list(range(count))
-    assert settings.Sensitivity.x2n == 0
-    assert settings.TimeConstant.us_10 == 0
-    assert settings.TimeConstant.ms_100 == 8
-    assert settings.TimeConstant.ks_30 == 19
-    assert [member.name for member in settings.LowPassFilterSlope] == [
-        "dB_6",
-        "dB_12",
-        "dB_18",
-        "dB_24",
-    ]
-    assert settings.SampleRate.mHz_62_5 == 0
-    assert settings.SampleRate.Hz_512 == 13
-    assert settings.SampleRate.TRIGGER == 14
-    assert [member.name for member in settings.OutputExpansion] == ["x1", "x10", "x100"]
-
-
-def test_numeric_invalid_codes_and_wrong_enum_classes(
-    mock_instrument, resource, simulation
+def test_snap_serializes_codes_independently_of_enum_string_format(
+    mock_instrument, resource
 ):
-    for driver in (mock_instrument, simulation):
-        for name, enum, command in NUMERIC_PROPERTIES:
-            for value in (-1, len(enum), settings.ReferenceSource.INTERNAL):
-                with pytest.raises(ValueError):
-                    setattr(driver, name, value)
-        with pytest.raises(ValueError, match="ReferenceSource"):
-            driver.reference_source = settings.LocalMode.REMOTE
-    resource.write.assert_not_called()
-
-
-def test_display_enums_are_checked_against_channel(mock_instrument, resource, simulation):
-    for driver in (mock_instrument, simulation):
-        for channel, displays, ratios in (
-            (settings.Channel.CH1, settings.Channel1Display, settings.Channel1Ratio),
-            (settings.Channel.CH2, settings.Channel2Display, settings.Channel2Ratio),
-        ):
-            for display in displays:
-                for ratio in ratios:
-                    driver.set_display(channel, display, ratio)
-                    if driver is mock_instrument:
-                        resource.write.assert_called_with(
-                            f"DDEF {int(channel)}, {int(display)}, {int(ratio)}"
-                        )
-                        resource.query.return_value = f"{int(display)},{int(ratio)}"
-                    assert driver.get_display(channel) == (int(display), int(ratio))
-        with pytest.raises(ValueError):
-            driver.set_display(settings.Channel.CH1, settings.Channel2Display.PHASE)
-        with pytest.raises(ValueError):
-            driver.set_display(
-                settings.Channel.CH2,
-                settings.Channel2Display.Y,
-                settings.Channel1Ratio.AUX_IN_1,
-            )
-
-
-def test_output_expansion_and_parameter_codes(mock_instrument, resource, simulation):
-    for parameter in settings.OutputParameter:
-        for expand in settings.OutputExpansion:
-            for driver in (mock_instrument, simulation):
-                driver.set_output_offset_expand(parameter, 12.5, expand)
-                if driver is mock_instrument:
-                    resource.write.assert_called_with(
-                        f"OEXP {int(parameter)}, 12.5, {int(expand)}"
-                    )
-                    resource.query.return_value = f"12.5,{int(expand)}"
-                assert driver.get_output_offset_expand(parameter) == (12.5, int(expand))
-                assert type(driver.get_output_offset_expand(parameter)[1]) is int
-                driver.auto_offset(parameter)
-            resource.write.assert_called_with(f"AOFF {int(parameter)}")
-    assert [int(x) for x in settings.OutputExpansion] == [0, 1, 2]
-    for driver in (mock_instrument, simulation):
-        for operation in (driver.get_output_offset_expand, driver.auto_offset):
-            with pytest.raises(ValueError):
-                operation(0)
-
-
-def test_measurement_selectors_and_integer_serialization(
-    mock_instrument, resource, simulation
-):
-    resource.query.return_value = "1.25"
-    for parameter in settings.MeasurementParameter:
-        for driver in (mock_instrument, simulation):
-            if int(parameter) <= 4:
-                driver.measure(parameter)
-            else:
-                with pytest.raises(ValueError):
-                    driver.measure(parameter)
+    # IntEnum.__str__ differs across supported Python versions. Wire codes must not.
     with patch.object(
-        settings.MeasurementParameter,
-        "__str__",
-        lambda member: f"MeasurementParameter.{member.name}",
+        settings.MeasurementParameter, "__str__", lambda member: member.name
     ):
-        assert str(settings.MeasurementParameter.X) == "MeasurementParameter.X"
-        for second in list(settings.MeasurementParameter)[1:]:
-            resource.query.return_value = "1.0,2.0"
-            assert tuple(
-                mock_instrument.measure_multiple(
-                    [settings.MeasurementParameter.X, second]
-                )
-            ) == (1.0, 2.0)
-            resource.query.assert_called_with(f"SNAP? 1,{int(second)}")
-    for driver in (mock_instrument, simulation):
-        with pytest.raises(ValueError):
-            driver.measure(settings.OutputParameter.X)
-        with pytest.raises(ValueError):
-            driver.measure_multiple(
+        resource.query.return_value = "0.003,1000"
+        values = mock_instrument.measure_multiple(
+            [
+                settings.MeasurementParameter.X,
+                settings.MeasurementParameter.REFERENCE_FREQUENCY,
+            ]
+        )
+        assert tuple(values) == (0.003, 1000.0)
+    resource.query.assert_called_once_with("SNAP? 1,9")
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        pytest.param(
+            lambda d: setattr(d, "sensitivity", settings.ReferenceSource.INTERNAL),
+            id="setting",
+        ),
+        pytest.param(
+            lambda d: d.set_display(1, settings.Channel2Display.PHASE),
+            id="display-channel",
+        ),
+        pytest.param(
+            lambda d: d.set_display(
+                2, settings.Channel2Display.Y, settings.Channel1Ratio.AUX_IN_1
+            ),
+            id="ratio-channel",
+        ),
+        pytest.param(
+            lambda d: d.read_display(settings.AuxiliaryChannel.AUX1),
+            id="channel-selector",
+        ),
+        pytest.param(
+            lambda d: d.measure(settings.OutputParameter.X), id="measurement-selector"
+        ),
+        pytest.param(
+            lambda d: d.measure_multiple(
                 [settings.MeasurementParameter.X, settings.Channel.CH2]
-            )
-
-
-def test_channel_and_auxiliary_selectors(mock_instrument, resource, simulation):
-    resource.query.return_value = "1"
-    for channel in settings.Channel:
-        for driver in (mock_instrument, simulation):
-            driver.read_display(channel)
-            driver.set_front_output(channel, settings.FrontPanelOutputSource.COMPONENT)
-            driver.get_front_output(channel)
-        resource.write.assert_called_with(f"FPOP {int(channel)}, 1")
-    for channel in settings.AuxiliaryChannel:
-        for driver in (mock_instrument, simulation):
-            driver.set_aux_out(channel, 0.5)
-            driver.get_aux_out(channel)
-            driver.get_aux_in(channel)
-        resource.write.assert_called_with(f"AUXV {int(channel)}, 0.5")
-    for driver in (mock_instrument, simulation):
-        with pytest.raises(ValueError):
-            driver.read_display(settings.AuxiliaryChannel.AUX1)
-
-
-def test_register_names_positions_and_masks(mock_instrument, resource, simulation):
-    for register, bits, flags, enable_command, status_query in REGISTER_TYPES:
-        for bit in bits:
-            mask = flags[bit.name]
-            assert int(mask) == 1 << int(bit)
-            for driver in (mock_instrument, simulation):
-                driver.set_enable_register(register, mask)
-                driver.set_enable_register(
-                    register, settings.SwitchState.ON, decimal=False, bit=bit
-                )
-            resource.write.assert_called_with(f"{enable_command} {int(bit)},1")
-            resource.query.return_value = "1"
-            assert mock_instrument.get_enable_register(register, bit) == 1
-            resource.query.assert_called_with(f"{enable_command}? {int(bit)}")
-            assert mock_instrument.get_status_byte(register, bit) == 1
-            resource.query.assert_called_with(f"{status_query} {int(bit)}")
-            assert simulation.get_enable_register(register, bit) == 1
-            assert simulation.get_status_byte(register, bit) in (0, 1)
-        members = list(flags)
-        combined = members[0] | members[-1]
-        mock_instrument.set_enable_register(register, combined)
-        resource.write.assert_called_with(f"{enable_command} {int(combined)}")
-        resource.query.return_value = str(int(combined))
-        assert flags(mock_instrument.get_status_byte(register)) == combined
-
-
-def test_register_masks_positions_and_registers_cannot_be_mixed(
-    mock_instrument, resource, simulation
-):
-    for driver in (mock_instrument, simulation):
-        for operation in (
-            lambda: driver.get_status_byte(
-                settings.StatusRegister.ERROR, settings.SerialPollBit.ERROR
             ),
-            lambda: driver.get_enable_register(
-                settings.StatusRegister.ERROR, settings.ErrorFlag.RAM_ERROR
-            ),
-            lambda: driver.set_enable_register(
-                settings.StatusRegister.ERROR, settings.ErrorBit.RAM_ERROR
-            ),
-            lambda: driver.set_enable_register(
-                settings.StatusRegister.ERROR, settings.SerialPollFlag.ERROR
-            ),
-            lambda: driver.set_enable_register(
-                settings.StatusRegister.ERROR,
+            id="snap-selector",
+        ),
+        pytest.param(
+            lambda d: d.get_status_byte("error", settings.SerialPollBit.ERROR),
+            id="register-bit-type",
+        ),
+        pytest.param(
+            lambda d: d.get_enable_register("error", settings.ErrorFlag.RAM_ERROR),
+            id="mask-as-bit",
+        ),
+        pytest.param(
+            lambda d: d.set_enable_register("error", settings.ErrorBit.RAM_ERROR),
+            id="bit-as-mask",
+        ),
+        pytest.param(
+            lambda d: d.set_enable_register("error", settings.SerialPollFlag.ERROR),
+            id="register-mask-type",
+        ),
+        pytest.param(
+            lambda d: d.set_enable_register(
+                "error",
                 settings.ErrorFlag.RAM_ERROR,
                 decimal=False,
                 bit=settings.ErrorBit.RAM_ERROR,
             ),
-        ):
-            with pytest.raises(ValueError):
-                operation()
+            id="mask-as-switch",
+        ),
+    ],
+)
+def test_unrelated_enums_are_rejected_even_when_codes_are_valid(
+    mock_instrument, resource, operation
+):
+    with pytest.raises(ValueError):
+        operation(mock_instrument)
     resource.write.assert_not_called()
     resource.query.assert_not_called()
 
 
-def test_annotations_expose_enum_inputs_and_integer_getters():
-    for cls in (sr830.SR830, virtual_sr830.VirtualSR830):
-        for name, enum, command in NUMERIC_PROPERTIES:
-            setter_hints = typing.get_type_hints(getattr(cls, name).fset)
-            parameter = next(
-                (value for key, value in setter_hints.items() if key != "return")
-            )
-            assert set(typing.get_args(parameter)) == {enum, int}
-            assert typing.get_type_hints(getattr(cls, name).fget)["return"] is int
-        assert inspect.signature(cls.connect) == inspect.signature(sr830.SR830.connect)
+@pytest.mark.parametrize(
+    "register,mask,bit,expected_write,expected_status_query",
+    [
+        (
+            "standard_event",
+            settings.StandardEventFlag.EXECUTION_ERROR,
+            settings.StandardEventBit.EXECUTION_ERROR,
+            "*ESE 16",
+            "*ESR? 4",
+        ),
+        (
+            "serial_poll",
+            settings.SerialPollFlag.ERROR,
+            settings.SerialPollBit.ERROR,
+            "*SRE 4",
+            "*STB? 2",
+        ),
+        (
+            "error",
+            settings.ErrorFlag.RAM_ERROR,
+            settings.ErrorBit.RAM_ERROR,
+            "ERRE 4",
+            "ERRS? 2",
+        ),
+        (
+            "lia_status",
+            settings.LiaStatusFlag.OUTPUT_OVERLOAD,
+            settings.LiaStatusBit.OUTPUT_OVERLOAD,
+            "LIAE 4",
+            "LIAS? 2",
+        ),
+    ],
+)
+def test_register_wire_contract(
+    mock_instrument,
+    resource,
+    register,
+    mask,
+    bit,
+    expected_write,
+    expected_status_query,
+):
+    mock_instrument.set_enable_register(register, mask)
+    resource.write.assert_called_with(expected_write)
+    command = expected_write.split()[0]
+    position = expected_status_query.split()[1]
+    mock_instrument.set_enable_register(
+        register, settings.SwitchState.ON, decimal=False, bit=bit
+    )
+    resource.write.assert_called_with(f"{command} {position},1")
+    resource.query.return_value = "1"
+    assert mock_instrument.get_enable_register(register, bit) == 1
+    resource.query.assert_called_with(f"{command}? {position}")
+    assert mock_instrument.get_status_byte(register, bit) == 1
+    resource.query.assert_called_with(expected_status_query)
 
 
 def test_enable_all_status_bytes_writes_all_four_registers(mock_instrument, resource):

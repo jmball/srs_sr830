@@ -9,9 +9,7 @@ import pytest
 from sr830 import Channel
 
 
-@pytest.mark.parametrize(
-    "fields", [[], [""], ["1", ""], ["1", "2", "3", ""], ["bad", "2"]]
-)
+@pytest.mark.parametrize("fields", [[], ["1", ""], ["1", "2", "3", ""], ["bad", "2"]])
 def test_ascii_requires_exact_valid_sample_count(
     mock_instrument, resource, query_replies, fields
 ):
@@ -123,12 +121,18 @@ def test_ascii_buffer_uses_guarded_query_and_preserves_parsing(
     "reader_name,command,raw,expected",
     [
         pytest.param(
-            "get_binary_buffer_data", "TRCB?", bytes([13, 10, 128, 63]),
-            struct.unpack("<f", bytes([13, 10, 128, 63])), id="ieee",
+            "get_binary_buffer_data",
+            "TRCB?",
+            bytes([13, 10, 128, 63]),
+            struct.unpack("<f", bytes([13, 10, 128, 63])),
+            id="ieee",
         ),
         pytest.param(
-            "get_non_norm_buffer_data", "TRCL?", struct.pack("<hh", 10, 124),
-            (10.0,), id="mantissa",
+            "get_non_norm_buffer_data",
+            "TRCL?",
+            struct.pack("<hh", 10, 124),
+            (10.0,),
+            id="mantissa",
         ),
     ],
 )

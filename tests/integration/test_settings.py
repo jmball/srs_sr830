@@ -107,23 +107,6 @@ def test_output_offset_and_expansion(instrument, parameter):
         instrument.set_output_offset_expand(parameter, *previous)
 
 
-@pytest.mark.parametrize(
-    "name,value",
-    [
-        ("reference_phase_shift", 721),
-        ("reference_frequency", 102001),
-        ("harmonic", 0),
-        ("sine_amplitude", 0),
-        ("sensitivity", 27),
-        ("time_constant", 20),
-        ("sample_rate", 15),
-    ],
-)
-def test_invalid_settings(instrument, name, value):
-    with pytest.raises(ValueError):
-        setattr(instrument, name, value)
-
-
 @pytest.mark.parametrize("channel", list(Channel))
 def test_front_output_round_trip(instrument, channel):
     previous = instrument.get_front_output(channel)

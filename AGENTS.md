@@ -112,6 +112,11 @@ There is no legacy test module in src and no import-time argument parsing.
 Use query_replies to map stable VISA query responses by command; reserve ordered
 side_effect lists for intentionally changing replies or query-order assertions.
 Keep validation in shared helpers instead of repeating checks inside register methods.
+Favor representative, independent wire contracts and behavioral tests over exhaustive
+setting/member/type products. Test shared validation once thoroughly and check its
+use at other entry points; do not duplicate inherited validation on the simulator.
+Expected wire codes should be literal, manual-backed values rather than derived
+from the enum under test. Use mypy for annotations; coverage is diagnostic, not a target.
 
 Use `uv add --dev` for development tools, `uv add` for runtime dependencies,
 and `uv lock --upgrade-package` for targeted updates. Commit pyproject.toml and

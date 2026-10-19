@@ -1,91 +1,97 @@
-"""Each setting code has identical integer/enum behavior in both drivers."""
-
-from enum import IntEnum
+"""Representative command routing and response parsing against literal wire codes."""
 
 import pytest
-import sr830
-import sr830.settings as settings
-import virtual_sr830
 
-from tests.cases import SETTING_COMMANDS
+from sr830 import settings
+from tests.cases import SETTING_CASES
 
 
 @pytest.mark.parametrize(
-    "enum",
-    sorted({enum for _, enum, _ in SETTING_COMMANDS}, key=lambda enum: enum.__name__),
+    "name,value,expected_command",
+    SETTING_CASES,
+    ids=[name for name, _, _ in SETTING_CASES],
 )
-def test_categorical_enums_are_shared_and_use_command_codes(enum):
-    assert issubclass(enum, IntEnum)
-    assert getattr(sr830, enum.__name__) is enum
-    assert getattr(virtual_sr830, enum.__name__) is enum
-    assert [int(member) for member in enum] == list(range(len(enum)))
-
-
-@pytest.mark.parametrize(
-    "name,member,command",
-    [
-        pytest.param(name, member, command, id=f"{name}-{member.name}")
-        for name, enum, command in SETTING_COMMANDS
-        for member in enum
-    ],
-)
-@pytest.mark.parametrize("as_integer", [False, True], ids=["enum", "integer"])
-def test_setting_codes_emit_commands_and_return_integers(
-    mock_instrument, resource, simulation, name, member, command, as_integer
+def test_setting_wire_contract(
+    mock_instrument, resource, query_replies, name, value, expected_command
 ):
-    value = int(member) if as_integer else member
-    resource.query.return_value = "1"  # GPIB is required for FAST modes.
+    command, code = expected_command.split()
+    query_replies.update({"OUTX?": "1", f"{command}?": code})
     setattr(mock_instrument, name, value)
-    resource.write.assert_called_with(f"{command} {int(member)}")
-    resource.query.return_value = str(int(member))
-    result = getattr(mock_instrument, name)
-    assert type(result) is int
-    assert result == int(member)
-    setattr(simulation, name, value)
-    result = getattr(simulation, name)
-    assert type(result) is int
-    assert result == int(member)
+    resource.write.assert_called_once_with(expected_command)
+    assert getattr(mock_instrument, name) == int(code)
+    resource.query.assert_called_with(f"{command}?")
 
 
-@pytest.mark.parametrize("name,enum,command", SETTING_COMMANDS)
-@pytest.mark.parametrize("driver_class", [sr830.SR830, virtual_sr830.VirtualSR830])
-def test_invalid_integer_codes_still_raise(driver_class, name, enum, command):
-    with pytest.raises(ValueError):
-        setattr(driver_class(), name, len(enum))
+def test_plain_integer_codes_remain_supported(mock_instrument, resource):
+    mock_instrument.sensitivity = 8
+    resource.write.assert_called_once_with("SENS 8")
+    resource.query.return_value = "8"
+    result = mock_instrument.sensitivity
+    assert result == 8
+    assert type(result) is int
 
 
 @pytest.mark.parametrize(
-    "channel,display,ratio",
+    "channel,display,ratio,expected_command,reply",
     [
-        (1, settings.Channel1Display.AUX_IN_2, settings.Channel1Ratio.AUX_IN_1),
-        (2, settings.Channel2Display.PHASE, settings.Channel2Ratio.AUX_IN_4),
+        (
+            1,
+            settings.Channel1Display.AUX_IN_2,
+            settings.Channel1Ratio.AUX_IN_1,
+            "DDEF 1, 4, 1",
+            "4,1",
+        ),
+        (
+            2,
+            settings.Channel2Display.PHASE,
+            settings.Channel2Ratio.AUX_IN_4,
+            "DDEF 2, 1, 2",
+            "1,2",
+        ),
     ],
+    ids=["ch1-aux", "ch2-phase"],
 )
-def test_display_enums_preserve_integer_tuple_returns(
-    mock_instrument, resource, simulation, channel, display, ratio
+def test_display_wire_contract(
+    mock_instrument, resource, channel, display, ratio, expected_command, reply
 ):
     mock_instrument.set_display(channel, display, ratio)
-    resource.write.assert_called_with(f"DDEF {channel}, {int(display)}, {int(ratio)}")
-    simulation.set_display(channel, display, ratio)
-    result = simulation.get_display(channel)
-    assert result == (int(display), int(ratio))
-    assert all(type(value) is int for value in result)
-    mock_instrument.set_front_output(channel, settings.FrontPanelOutputSource.COMPONENT)
-    resource.write.assert_called_with(f"FPOP {channel}, 1")
-    simulation.set_front_output(channel, settings.FrontPanelOutputSource.COMPONENT)
-    assert type(simulation.get_front_output(channel)) is int
-    assert simulation.get_front_output(channel) == 1
+    resource.write.assert_called_once_with(expected_command)
+    resource.query.return_value = reply
+    assert mock_instrument.get_display(channel) == tuple(map(int, reply.split(",")))
+    resource.query.assert_called_once_with(f"DDEF? {channel}")
 
 
-def test_connect_accepts_named_output_interface(simulation):
-    simulation.disconnect()
-    simulation.connect(
-        "TCPIP0::example.invalid::1234::SOCKET",
-        output_interface=settings.OutputInterface.GPIB,
+def test_front_output_wire_contract(mock_instrument, resource):
+    mock_instrument.set_front_output(
+        settings.Channel.CH2, settings.FrontPanelOutputSource.DISPLAY
     )
-    assert type(simulation.output_interface) is int
-    assert simulation.output_interface == 1
-    simulation.disconnect()
+    resource.write.assert_called_once_with("FPOP 2, 0")
+    resource.query.return_value = "0"
+    assert mock_instrument.get_front_output(settings.Channel.CH2) == 0
+    resource.query.assert_called_once_with("FPOP? 2")
+
+
+def test_offset_and_expansion_wire_contract(mock_instrument, resource):
+    mock_instrument.set_output_offset_expand(
+        settings.OutputParameter.R, 12.5, settings.OutputExpansion.x100
+    )
+    resource.write.assert_called_with("OEXP 3, 12.5, 2")
+    resource.query.return_value = "12.5,2"
+    assert mock_instrument.get_output_offset_expand(settings.OutputParameter.R) == (
+        12.5,
+        2,
+    )
+    resource.query.assert_called_once_with("OEXP? 3")
+    mock_instrument.auto_offset(settings.OutputParameter.R)
+    resource.write.assert_called_with("AOFF 3")
+
+
+def test_auxiliary_wire_contract(mock_instrument, resource, query_replies):
+    mock_instrument.set_aux_out(settings.AuxiliaryChannel.AUX3, 0.5)
+    resource.write.assert_called_once_with("AUXV 3, 0.5")
+    query_replies.update({"AUXV? 3": "0.5", "OAUX? 3": "-1.25"})
+    assert mock_instrument.get_aux_out(settings.AuxiliaryChannel.AUX3) == 0.5
+    assert mock_instrument.get_aux_in(settings.AuxiliaryChannel.AUX3) == -1.25
 
 
 def test_harmonic_read_and_write(mock_instrument, resource):

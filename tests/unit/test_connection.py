@@ -1,12 +1,9 @@
 """Hardware-free connection lifecycle tests. Run with pytest."""
 
 import pytest
-import inspect
-import typing
 from unittest.mock import Mock, PropertyMock, patch
 import pyvisa
 from pyvisa.constants import InterfaceType
-from sr830 import SR830
 from virtual_sr830 import VirtualSR830
 
 
@@ -289,19 +286,6 @@ def test_local_mode_is_an_explicit_caller_setting(connect, driver, resource):
     resource.write.assert_called_with("LOCL 2")
     driver.local_mode = 1
     resource.write.assert_called_with("LOCL 1")
-    for mode in (0, 1, 2):
-        virtual = VirtualSR830()
-        virtual.connect("ASRL1::INSTR")
-        virtual.local_mode = mode
-        assert virtual.local_mode == mode
-
-
-def test_getters_query_responses(connect, driver, resource):
-    connect()
-    resource.query.side_effect = ["2,1", "1"]
-    assert driver.get_display(1) == (2, 1)
-    assert driver.gpib_override_remote == 1
-    assert [c.args[0] for c in resource.query.call_args_list] == ["DDEF? 1", "OVRM?"]
 
 
 def test_set_enable_register_requires_bit_for_binary_values(connect, driver, resource):
@@ -310,21 +294,6 @@ def test_set_enable_register_requires_bit_for_binary_values(connect, driver, res
         driver.set_enable_register("error", 1, decimal=False)
     driver.set_enable_register("error", 1, decimal=False, bit=3)
     resource.write.assert_any_call("ERRE 3,1")
-
-
-def test_all_driver_methods_have_resolvable_annotations():
-    for cls in (SR830, VirtualSR830):
-        assert inspect.signature(cls.connect) == inspect.signature(SR830.connect)
-        for name, member in vars(cls).items():
-            functions = [member] if inspect.isfunction(member) else []
-            if isinstance(member, property):
-                functions = [f for f in (member.fget, member.fset) if f is not None]
-            for function in functions:
-                hints = typing.get_type_hints(function)
-                assert "return" in hints, name
-                for parameter in inspect.signature(function).parameters:
-                    if parameter != "self":
-                        assert parameter in hints, name
 
 
 def test_output_interface_write_failure_restores_framing(connect, driver, resource):

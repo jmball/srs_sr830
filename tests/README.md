@@ -14,8 +14,8 @@ simulated acquisition. No hardware is opened without an explicit resource.
 | Location | Purpose |
 | --- | --- |
 | `unit/test_connection.py` | Initialization, cleanup, reconnection, connection framing, and guarded I/O |
-| `unit/test_settings.py` | Parametrized integer/enum codes, commands, and getter types |
-| `unit/test_enums.py` | Named selectors, enum validation, register masks, and annotations |
+| `unit/test_settings.py` | One literal wire contract per setting and representative response parsing |
+| `unit/test_enums.py` | Enum type safety, SNAP serialization, and representative register contracts |
 | `unit/test_validation.py` | Invalid public arguments and strict integer protocol fields |
 | `unit/test_buffers.py` | All trace formats, range checks, pause/resume, and framing recovery |
 | `unit/test_fast_transfer.py` | FAST decoding, lifecycle guards, and failure cleanup |
@@ -48,6 +48,23 @@ Waiting tests use `ManualClock` from `support.py` for monotonic time and sleep.
 Advancing that clock verifies timeout boundaries without real delays. Simulation
 tests share the connected `simulation` fixture, a fixed clock, and the driver's
 `advance_time()` method. Each simulated connection is closed after its test.
+
+## Choosing tests
+
+Keep cases that catch distinct mistakes: wrong command routing, invalid inputs
+reaching I/O, protocol framing, cleanup, acquisition, and signal/state behavior.
+`cases.py` supplies one representative setting command per property, with literal
+wire codes from chapter 5 of the SR830 manual. Expected commands must not be
+computed from the enum values being checked.
+
+Test shared type validation thoroughly through a representative public setting;
+check other entry points with representative invalid inputs. The simulator
+inherits this validation, so do not repeat the same cases against both classes.
+Use simulator tests for measurement/state behavior and integration tests for
+public round trips on either backend. Leave annotation checking to mypy.
+
+Coverage helps locate omissions; it is not a target to preserve by adding tests
+of Python's enum machinery or unreachable private-helper combinations.
 
 ## Real hardware
 

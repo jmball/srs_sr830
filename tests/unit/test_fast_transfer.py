@@ -113,7 +113,6 @@ def test_fast_stream_rejects_interface_changes(mock_instrument, resource):
 @pytest.mark.parametrize(
     "operation",
     [
-        pytest.param(lambda d: d._query_ascii_values("TRCA? 1,0,1"), id="ascii-query"),
         pytest.param(lambda d: d.get_ascii_buffer_data(1, 0, 1), id="trace-query"),
         pytest.param(
             lambda d: setattr(d, "data_transfer_mode", DataTransferMode.WINDOWS),
