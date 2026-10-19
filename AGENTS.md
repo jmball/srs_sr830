@@ -14,6 +14,11 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
 - Each package's `__init__.py` exports its implementation and obtains a version
   through `importlib.metadata` for the `srs_sr830` distribution, falling back to
   `0.0.0`.
+- `examples/configure_and_measure.py`: hardware-only configuration and measurement
+  guide; requires --resource-name and changes instrument settings.
+- `examples/configure_and_measure_virtual.py`: standalone virtual configuration
+  and measurement guide; opens no hardware. Keep configuration inline in each
+  example rather than sharing a helper between them.
 - `examples/connect_with_logging.py`: logging and serial connection example. Running it
   opens a real resource.
 - `src/sr830/_connection.py`: shared interface inference and framing validation.

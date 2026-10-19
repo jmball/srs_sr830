@@ -90,33 +90,38 @@ Both packages ship inline type hints. `measure_multiple()` returns an iterator
 of floats; buffer readers return tuples. Integer protocol fields reject floats
 and booleans rather than silently coercing them.
 
-## Configuration and measurement example
+## Configuration and measurement examples
 
-Run the example with the virtual instrument (no VISA resource or hardware is
-opened):
+Both examples show connection, configuration, settling, and coherent X/Y/R/phase
+measurements inline in `main()`.
+
+Run [the virtual example](examples/configure_and_measure_virtual.py) without
+hardware:
 
 ```sh
-uv run --locked python examples/configure_and_measure.py
+uv run --locked python examples/configure_and_measure_virtual.py
 ```
 
-To use a real instrument, pass its VISA resource name. This example changes the
-reference source, harmonic, and frequency, input configuration, sensitivity,
-time constant, filter slope, and reserve mode; connect any signal source with
-those settings in mind. It selects the fundamental harmonic, normal reserve, a
-12 dB/octave slope, then a 100 ms time constant, and waits an estimated ten
-time constants (one second).
-Supply `--output-interface 0` or `1` when an adapter's instrument-side
-interface cannot be inferred. For serial hardware, also supply its baud rate
-and install the serial extra if needed:
+It supplies simulated 3 mV X and 4 mV Y RMS components. Waiting for settling
+advances simulated time without sleeping.
+
+[The hardware example](examples/configure_and_measure.py) requires an explicit
+VISA resource. It changes reference source, harmonic and frequency, input
+configuration, sensitivity, time constant, filter slope, and reserve mode; connect
+a suitable signal source before running. It selects the fundamental harmonic,
+137 Hz internal reference, 10 mV sensitivity, normal reserve, 12 dB/octave slope,
+and a 100 ms time constant, then waits an estimated ten time constants.
 
 ```sh
+uv run --locked python examples/configure_and_measure.py \
+    --resource-name "GPIB0::8::INSTR"
+
 uv run --locked --extra serial python examples/configure_and_measure.py \
     --resource-name "ASRL2::INSTR" --baud-rate 9600
 ```
 
-`--visa-backend @py` can select the PyVISA-py backend. The script reports
-simulated RMS voltage components by default; with hardware it reports the
-instrument's measured X, Y, R, and phase.
+Use `--output-interface 0` or `1` for ambiguous adapters, and `--visa-backend @py`
+to select PyVISA-py. Run the hardware example with `--help` for all options.
 
 ## Named settings
 
