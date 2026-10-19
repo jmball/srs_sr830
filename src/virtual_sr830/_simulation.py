@@ -13,6 +13,8 @@ import copy
 import math
 import struct
 
+import pyvisa
+
 from sr830.settings import (
     EndOfBufferMode,
     ErrorFlag,
@@ -295,7 +297,7 @@ class Simulation:
                 self.registers["standard_event"] |= int(
                     StandardEventFlag.EXECUTION_ERROR
                 )
-                raise ValueError(f"No setup saved in slot {number}.")
+                return
             else:
                 preserved = {
                     key: self.settings[key] for key in ("OUTX", "LOCL", "OVRM", "*PSC")
@@ -360,9 +362,10 @@ class Simulation:
             self.busy_until = self.now() + 0.05
         elif key in self.settings:
             if key == "FREQ" and not self.settings["FMOD"]:
-                raise ValueError(
-                    "Internal frequency is writable only in internal reference mode."
+                self.registers["standard_event"] |= int(
+                    StandardEventFlag.EXECUTION_ERROR
                 )
+                return
             value_number = (
                 float(args[0]) if key in ("PHAS", "FREQ", "SLVL") else int(args[0])
             )
@@ -384,7 +387,7 @@ class Simulation:
                 self.fast.clear()
         else:
             self.registers["standard_event"] |= int(StandardEventFlag.COMMAND_ERROR)
-            raise ValueError(f"Unsupported virtual command: {command}.")
+            return
 
     def frequency(self) -> float:
         return (
@@ -461,7 +464,8 @@ class Simulation:
             return str(self.frequency())
         if key in self.settings:
             return str(self.settings[key])
-        raise ValueError(f"Unsupported virtual query: {command}.")
+        self.registers["standard_event"] |= int(StandardEventFlag.COMMAND_ERROR)
+        raise pyvisa.errors.VisaIOError(pyvisa.constants.StatusCode.error_timeout)
 
     def buffer_bytes(self, command: str) -> bytes:
         values = [float(field) for field in self.query(command).split(",") if field]

@@ -19,13 +19,13 @@ def test_setting_wire_contract(
     setattr(mock_instrument, name, value)
     resource.write.assert_called_once_with(expected_command)
     assert getattr(mock_instrument, name) == int(code)
-    resource.query.assert_called_with(f"{command}?")
+    resource.query.assert_any_call(f"{command}?")
 
 
-def test_plain_integer_codes_remain_supported(mock_instrument, resource):
+def test_plain_integer_codes_remain_supported(mock_instrument, resource, query_replies):
     mock_instrument.sensitivity = 8
     resource.write.assert_called_once_with("SENS 8")
-    resource.query.return_value = "8"
+    query_replies["SENS?"] = "8"
     result = mock_instrument.sensitivity
     assert result == 8
     assert type(result) is int
@@ -52,36 +52,43 @@ def test_plain_integer_codes_remain_supported(mock_instrument, resource):
     ids=["ch1-aux", "ch2-phase"],
 )
 def test_display_wire_contract(
-    mock_instrument, resource, channel, display, ratio, expected_command, reply
+    mock_instrument,
+    resource,
+    query_replies,
+    channel,
+    display,
+    ratio,
+    expected_command,
+    reply,
 ):
     mock_instrument.set_display(channel, display, ratio)
     resource.write.assert_called_once_with(expected_command)
-    resource.query.return_value = reply
+    query_replies[f"DDEF? {channel}"] = reply
     assert mock_instrument.get_display(channel) == tuple(map(int, reply.split(",")))
-    resource.query.assert_called_once_with(f"DDEF? {channel}")
+    resource.query.assert_any_call(f"DDEF? {channel}")
 
 
-def test_front_output_wire_contract(mock_instrument, resource):
+def test_front_output_wire_contract(mock_instrument, resource, query_replies):
     mock_instrument.set_front_output(
         settings.Channel.CH2, settings.FrontPanelOutputSource.DISPLAY
     )
     resource.write.assert_called_once_with("FPOP 2, 0")
-    resource.query.return_value = "0"
+    query_replies["FPOP? 2"] = "0"
     assert mock_instrument.get_front_output(settings.Channel.CH2) == 0
-    resource.query.assert_called_once_with("FPOP? 2")
+    resource.query.assert_any_call("FPOP? 2")
 
 
-def test_offset_and_expansion_wire_contract(mock_instrument, resource):
+def test_offset_and_expansion_wire_contract(mock_instrument, resource, query_replies):
     mock_instrument.set_output_offset_expand(
         settings.OutputParameter.R, 12.5, settings.OutputExpansion.x100
     )
     resource.write.assert_called_with("OEXP 3, 12.5, 2")
-    resource.query.return_value = "12.5,2"
+    query_replies["OEXP? 3"] = "12.5,2"
     assert mock_instrument.get_output_offset_expand(settings.OutputParameter.R) == (
         12.5,
         2,
     )
-    resource.query.assert_called_once_with("OEXP? 3")
+    resource.query.assert_any_call("OEXP? 3")
     mock_instrument.auto_offset(settings.OutputParameter.R)
     resource.write.assert_called_with("AOFF 3")
 
@@ -94,9 +101,9 @@ def test_auxiliary_wire_contract(mock_instrument, resource, query_replies):
     assert mock_instrument.get_aux_in(settings.AuxiliaryChannel.AUX3) == -1.25
 
 
-def test_harmonic_read_and_write(mock_instrument, resource):
+def test_harmonic_read_and_write(mock_instrument, resource, query_replies):
     mock_instrument.harmonic = 2
     resource.write.assert_called_once_with("HARM 2")
-    resource.query.return_value = "2"
+    query_replies["HARM?"] = "2"
     assert mock_instrument.harmonic == 2
-    resource.query.assert_called_once_with("HARM?")
+    resource.query.assert_any_call("HARM?")

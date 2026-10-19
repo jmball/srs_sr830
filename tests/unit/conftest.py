@@ -19,12 +19,18 @@ def driver():
 
 @pytest.fixture
 def resource():
-    return Mock(spec=SerialInstrument)
+    resource = Mock(spec=SerialInstrument)
+    resource.query.return_value = "0"
+    resource.interface_type = InterfaceType.asrl
+    return resource
 
 
 @pytest.fixture
 def gpib_resource():
-    return Mock(spec=GPIBInstrument)
+    resource = Mock(spec=GPIBInstrument)
+    resource.query.return_value = "0"
+    resource.interface_type = InterfaceType.gpib
+    return resource
 
 
 @pytest.fixture
@@ -67,6 +73,6 @@ def query_replies(resource):
     Use this for steady settings, rather than depending on incidental query order.
     Keep side_effect sequences for tests that deliberately model changing replies.
     """
-    replies = {}
+    replies = {"*ESR?": "0", "ERRS?": "0", "LIAS?": "0"}
     resource.query.side_effect = replies.__getitem__
     return replies

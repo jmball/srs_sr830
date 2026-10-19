@@ -21,6 +21,7 @@ import pyvisa
 from pyvisa.constants import SerialTermination
 from pyvisa.resources import MessageBasedResource, SerialInstrument
 
+from .exceptions import InstrumentError, _check_registers
 from ._connection import connection_kwargs, resolve_output_interface
 from .settings import (
     AuxiliaryChannel,
@@ -82,43 +83,62 @@ class SR830:
 
     Use connect() to open a VISA connection and disconnect() to close it.
     The resource is stored privately in _instr; driver-owned I/O helpers raise
-    RuntimeError when disconnected.
+    RuntimeError when disconnected. Normal writes and queries check command and
+    device errors; measurement readers also check overload/unlock status. Event
+    register reads clear latched events. FAST diagnostics are deferred until stop.
     """
 
     def __init__(self) -> None:
         self._instr: MessageBasedResource | None = None
         self._fast_running = False
+        self._io_desynchronized = False
 
-    def _write(self, command: str) -> None:
+    def _raw_write(self, command: str) -> None:
         """Send a command to the connected instrument."""
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED_MESSAGE)
-        self._instr.write(command)
+        self._check_synchronized()
+        try:
+            self._instr.write(command)
+        except pyvisa.errors.VisaIOError as exc:
+            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+                self._io_desynchronized = True
+            raise
 
-    def _query(self, command: str) -> str:
+    def _raw_query(self, command: str) -> str:
         """Send a command and read its text response."""
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED_MESSAGE)
         if self._fast_running:
             raise RuntimeError("Stop fast transfer before issuing text queries.")
-        return self._instr.query(command)
+        self._check_synchronized()
+        try:
+            return self._instr.query(command)
+        except pyvisa.errors.VisaIOError as exc:
+            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+                self._io_desynchronized = True
+            raise
 
-    def _query_ascii_values(self, command: str) -> list[str]:
+    def _raw_query_ascii_values(self, command: str) -> list[str]:
         """Query ASCII fields, preserving empty trailing fields for buffer parsing."""
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED_MESSAGE)
         if self._fast_running:
             raise RuntimeError("Stop fast transfer before issuing text queries.")
+        self._check_synchronized()
         return list(
             self._instr.query_ascii_values(
                 command, converter=lambda value: value, container=list
             )
         )
 
-    def _read_buffer_bytes(self, command: str, size: int) -> bytes:
+    def _raw_read_buffer_bytes(self, command: str, size: int) -> bytes:
         """Read a headerless SR830 buffer without interpreting CR/LF as framing."""
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        self._check_synchronized()
+        if self._fast_running:
+            raise RuntimeError("Stop fast transfer before issuing buffer queries.")
         resource = self._instr
         termination = resource.read_termination
         serial_end = (
@@ -187,8 +207,8 @@ class SR830:
         -----
         The driver owns the opened resource. A second connect raises RuntimeError
         until disconnect is called. Initialization selects the response interface,
-        and enables status registers before storing _instr. Set local_mode
-        explicitly after connecting to select remote mode or local lockout.
+        and enables status registers before checking errors and storing _instr.
+        Set local_mode explicitly after connecting to select remote mode or local lockout.
         Failures close the resource and leave the instance disconnected; commands
         already sent to the instrument cannot be rolled back. Call reset()
         explicitly if a factory reset is wanted.
@@ -226,12 +246,14 @@ class SR830:
             resource.write(f"OUTX {interface}")
             for command in _ENABLE_REGISTER_COMMANDS.values():
                 resource.write(f"{command} 255")
+            _check_registers(resource.query, ("*ESR?", "ERRS?"), "connect()")
         except BaseException:
             # Preserve the initialization error even if close also fails.
             with suppress(Exception):
                 resource.close()
             raise
         self._instr = resource
+        self._io_desynchronized = False
         logger.debug("SR830 connection initialized: %s", resource_name)
 
     def disconnect(self) -> None:
@@ -265,63 +287,98 @@ class SR830:
         for register in registers:
             self.set_enable_register(register, 255, decimal=True)
 
-    @property
-    def errors(self) -> list[str]:
-        """Check for errors without printing, logging, or issuing warnings.
-
-        Returns
-        -------
-        errors : list
-            List of errors.
-
-        Notes
-        -----
-        Reading the error, LIA, and standard-event status registers clears their
-        latched bits. The caller decides how to report the returned errors.
-        """
-        status = SerialPollFlag(self.get_status_byte(StatusRegister.SERIAL_POLL))
-        errors: list[str] = []
-        if status & SerialPollFlag.MESSAGE_AVAILABLE:
-            errors.append("Interface output buffer is non-empty")
-        if status & SerialPollFlag.ERROR:
-            error_status = ErrorFlag(self.get_status_byte(StatusRegister.ERROR))
-            for flag, message in (
-                (ErrorFlag.BACKUP_ERROR, "Battery backup has failed"),
-                (ErrorFlag.RAM_ERROR, "RAM memory test found error"),
-                (ErrorFlag.ROM_ERROR, "ROM memory test found error"),
-                (ErrorFlag.GPIB_ERROR, "GPIB fast data transfer mode aborted"),
-                (ErrorFlag.DSP_ERROR, "DSP test found error"),
-                (ErrorFlag.MATH_ERROR, "Internal math error"),
-            ):
-                if error_status & flag:
-                    errors.append(message)
-        if status & SerialPollFlag.LIA_STATUS:
-            lia_status = LiaStatusFlag(self.get_status_byte(StatusRegister.LIA_STATUS))
-            for lia_flag, message in (
-                (LiaStatusFlag.INPUT_OVERLOAD, "Input or amplifier overload"),
-                (LiaStatusFlag.FILTER_OVERLOAD, "Time constant filter overload"),
-                (LiaStatusFlag.OUTPUT_OVERLOAD, "Output overload"),
-                (LiaStatusFlag.REFERENCE_UNLOCK, "Reference unlock detected"),
-            ):
-                if lia_status & lia_flag:
-                    errors.append(message)
-        if status & SerialPollFlag.STANDARD_EVENT:
-            event_status = StandardEventFlag(
-                self.get_status_byte(StatusRegister.STANDARD_EVENT)
+    def _check_synchronized(self) -> None:
+        if self._io_desynchronized:
+            raise RuntimeError(
+                "Response framing is uncertain after an I/O failure; disconnect and reconnect."
             )
-            for event_flag, message in (
-                (StandardEventFlag.INPUT_QUEUE_OVERFLOW, "Input queue overflow"),
-                (StandardEventFlag.OUTPUT_QUEUE_OVERFLOW, "Output queue overflow"),
-                (
-                    StandardEventFlag.EXECUTION_ERROR,
-                    "Command cannot execute/parameter out of range",
-                ),
-                (StandardEventFlag.COMMAND_ERROR, "Received illegal command"),
-            ):
-                if event_status & event_flag:
-                    errors.append(message)
 
-        return errors
+    def check_errors(self, *, operation: str = "check_errors()") -> None:
+        """Raise InstrumentError for command/execution and device faults.
+
+        Reads *ESR? and ERRS? directly, independently of enable masks. These
+        reads clear latched events, including non-error events such as power-on.
+        Faults may predate the operation. Measurement overload/unlock is checked
+        separately by check_measurement_status(). Automatic checks are deferred
+        during FAST; explicit checks raise RuntimeError until streaming stops.
+        """
+        _check_registers(self._raw_query, ("*ESR?", "ERRS?"), operation)
+
+    def check_measurement_status(
+        self, *, operation: str = "check_measurement_status()"
+    ) -> None:
+        """Raise InstrumentError for latched overload or reference-unlock faults.
+
+        Reads and clears LIAS?, including ordinary events such as triggers.
+        Measurement readers call this automatically. Configuration writes leave
+        this register alone, allowing callers to fix an overload or unlock.
+        """
+        _check_registers(self._raw_query, ("LIAS?",), operation)
+
+    def _write(self, command: str) -> None:
+        self._raw_write(command)
+        if not self._fast_running:
+            self.check_errors(operation=command)
+
+    def _diagnose_timeout(
+        self, command: str, failure: pyvisa.errors.VisaIOError
+    ) -> None:
+        # A delayed response could otherwise be mistaken for a status register.
+        self._io_desynchronized = True
+        try:
+            with self._io_timeout(1.0):
+                if not self._recover_after_timeout():
+                    return
+                self._io_desynchronized = False
+                self.check_errors(operation=command)
+        except InstrumentError as exc:
+            raise exc from failure
+        except Exception:
+            self._io_desynchronized = True
+            # An inconclusive diagnostic must preserve the original transport error.
+
+    def _recover_after_timeout(self) -> bool:
+        """Discard pending output only on native GPIB, where device clear is defined."""
+        if self._instr is None:
+            raise RuntimeError(_NOT_CONNECTED_MESSAGE)
+        if self._instr.interface_type != pyvisa.constants.InterfaceType.gpib:
+            return False
+        self._instr.clear()
+        return True
+
+    def _query(self, command: str) -> str:
+        try:
+            result = self._raw_query(command)
+        except pyvisa.errors.VisaIOError as exc:
+            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+                self._diagnose_timeout(command, exc)
+            raise
+        self.check_errors(operation=command)
+        return result
+
+    def _query_ascii_values(self, command: str) -> list[str]:
+        try:
+            result = self._raw_query_ascii_values(command)
+        except pyvisa.errors.VisaIOError as exc:
+            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+                self._diagnose_timeout(command, exc)
+            raise
+        self.check_errors(operation=command)
+        return result
+
+    def _read_buffer_bytes(self, command: str, size: int) -> bytes:
+        try:
+            result = self._raw_read_buffer_bytes(command, size)
+        except pyvisa.errors.VisaIOError as exc:
+            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+                self._diagnose_timeout(command, exc)
+            raise
+        except OSError:
+            self._io_desynchronized = True
+            raise
+        # The raw reader has restored text framing before diagnostics.
+        self.check_errors(operation=command)
+        return result
 
     # --- Reference and phase commands ---
     @property
@@ -994,11 +1051,12 @@ class SR830:
             previous = resource.read_termination
             try:
                 resource.read_termination = "\r" if interface == 0 else "\n"
-                self._write(f"OUTX {int(interface)}")
+                self._raw_write(f"OUTX {int(interface)}")
             except BaseException:
                 with suppress(Exception):
                     resource.read_termination = previous
                 raise
+            self.check_errors(operation=f"OUTX {int(interface)}")
         else:
             raise ValueError(
                 f"Invalid output interface: {interface}. Must be 0 (RS232) or 1 "
@@ -1585,9 +1643,11 @@ class SR830:
         starts_fast = False
         if not self._fast_running:
             starts_fast = bool(self.trigger_start_mode and self.data_transfer_mode)
-        self._write("TRIG")
         if starts_fast:
+            self._raw_write("TRIG")
             self._fast_running = True
+        else:
+            self._write("TRIG")
 
     @property
     def trigger_start_mode(self) -> int:
@@ -1641,7 +1701,7 @@ class SR830:
             self._write("STRT")
         else:
             # fast data transfer mode active
-            self._write("STRD")
+            self._raw_write("STRD")
             self._fast_running = True
 
     def pause(self) -> None:
@@ -1650,20 +1710,28 @@ class SR830:
         Ignored if storage is already paused or reset. Pending FAST output is
         discarded with VISA device clear before text queries are allowed again.
         """
-        self._write("PAUS")
         if self._fast_running:
+            self._raw_write("PAUS")
             self._discard_fast_data()
-        self._fast_running = False
+            self._fast_running = False
+            self.check_errors(operation="PAUS")
+            self.check_measurement_status(operation="PAUS")
+        else:
+            self._write("PAUS")
 
     def reset_data_buffers(self) -> None:
         """Reset data buffers.
 
         This command will erase the data buffer.
         """
-        self._write("REST")
         if self._fast_running:
+            self._raw_write("REST")
             self._discard_fast_data()
-        self._fast_running = False
+            self._fast_running = False
+            self.check_errors(operation="REST")
+            self.check_measurement_status(operation="REST")
+        else:
+            self._write("REST")
 
     # --- Data transfer commands ---
 
@@ -1687,7 +1755,9 @@ class SR830:
         """
         _validate_enum(parameter, MeasurementParameter)
         if parameter in range(1, 5):
-            return float(self._query(f"OUTP? {int(parameter)}"))
+            value = float(self._query(f"OUTP? {int(parameter)}"))
+            self.check_measurement_status(operation=f"OUTP? {int(parameter)}")
+            return value
         else:
             raise ValueError(
                 f"Invalid parameter: {parameter}. Must be 1 (X), 2 (Y), 3 (R), or 4 "
@@ -1712,7 +1782,9 @@ class SR830:
         """
         _validate_enum(channel, Channel)
         if channel in [1, 2]:
-            return float(self._query(f"OUTR? {int(channel)}"))
+            value = float(self._query(f"OUTR? {int(channel)}"))
+            self.check_measurement_status(operation=f"OUTR? {int(channel)}")
+            return value
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
 
@@ -1763,6 +1835,7 @@ class SR830:
         ):
             parameter_text = ",".join([str(int(i)) for i in parameters])
             values = self._query(f"SNAP? {parameter_text}").split(",")
+            self.check_measurement_status(operation=f"SNAP? {parameter_text}")
             return (float(i) for i in values)
         else:
             raise ValueError(
@@ -1808,6 +1881,7 @@ class SR830:
         if start_bin + bins > self.buffer_size:
             raise ValueError("Requested range exceeds the stored buffer points.")
         yield
+        self.check_measurement_status(operation="buffer read")
         # Deliberately do not resume after transfer/decoding failures.
         if loop and resume:
             self.start()
@@ -1946,7 +2020,11 @@ class SR830:
             if mode == DataTransferMode.OFF:
                 if self._fast_running:
                     self._discard_fast_data()
+                was_running = self._fast_running
                 self._fast_running = False
+                if was_running:
+                    self.check_errors(operation="FAST 0")
+                    self.check_measurement_status(operation="FAST 0")
         else:
             raise ValueError(
                 f"Invalid data transfer mode: {mode}. Must be 0 (off), 1 (on [DOS]), "
@@ -1957,10 +2035,14 @@ class SR830:
 
     def reset(self) -> None:
         """Reset the instrument to the default configuration."""
-        self._write("*RST")
         if self._fast_running:
+            self._raw_write("*RST")
             self._discard_fast_data()
-        self._fast_running = False
+            self._fast_running = False
+            self.check_errors(operation="*RST")
+            self.check_measurement_status(operation="*RST")
+        else:
+            self._write("*RST")
 
     @property
     def idn(self) -> str:
@@ -2153,7 +2235,8 @@ class SR830:
     ) -> int:
         """Get a status byte.
 
-        This function has no error check to avoid infinite recursion.
+        This raw diagnostic does not perform automatic fault checks or read any
+        other register. Event-register reads clear the queried latched bits.
 
         Parameters
         ----------
@@ -2172,7 +2255,7 @@ class SR830:
         command = _STATUS_REGISTER_COMMANDS[status_byte]
         if bit is not None:
             command += f" {int(bit)}"
-        return int(self._query(command))
+        return int(self._raw_query(command))
 
     @property
     def power_on_status_clear_bit(self) -> int:
@@ -2348,7 +2431,8 @@ class SR830:
         Counts include output offsets/expands; +/-30000 corresponds to the
         selected full scale before expansion. This method sends no text query.
         A failed read attempts to stop acquisition and discard pending output;
-        call pause() after a successful final read.
+        call pause() after a successful final read. Counts are provisional until
+        stopping the stream checks command/device and measurement faults.
 
         Parameters
         ----------
@@ -2375,8 +2459,12 @@ class SR830:
                 raise OSError("Incomplete fast-transfer response.")
             return tuple(struct.iter_unpack("<hh", raw))
         except BaseException as exc:
-            with suppress(Exception):
+            try:
                 self.pause()
+            except InstrumentError as fault:
+                raise fault from exc
+            except Exception:
+                pass
             if (
                 isinstance(exc, pyvisa.errors.VisaIOError)
                 and exc.error_code == pyvisa.constants.StatusCode.error_timeout

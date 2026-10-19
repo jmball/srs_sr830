@@ -208,15 +208,17 @@ def test_io_helpers_reject_disconnected_instances(connect, driver):
                 operation()
 
 
-def test_io_helpers_delegate_and_preserve_responses(connect, driver, resource):
+def test_io_helpers_delegate_and_preserve_responses(
+    connect, driver, resource, query_replies
+):
     connect()
     resource.write.reset_mock()
     resource.write.return_value = 6
     assert driver._write("*RST") is None
     resource.write.assert_called_once_with("*RST")
-    resource.query.return_value = "SR830,1234"
+    query_replies["*IDN?"] = "SR830,1234"
     assert driver._query("*IDN?") == "SR830,1234"
-    resource.query.assert_called_once_with("*IDN?")
+    resource.query.assert_any_call("*IDN?")
     resource.query_ascii_values.return_value = ["1.25", "-2.5", ""]
     assert driver._query_ascii_values("TRCA? 1,0,2") == ["1.25", "-2.5", ""]
     args, kwargs = resource.query_ascii_values.call_args
@@ -243,6 +245,8 @@ def test_io_helpers_preserve_visa_errors(connect, driver, resource):
             operation()
         assert caught.value is failure
         method.side_effect = None
+        driver.disconnect()
+        connect()
 
 
 def test_virtual_connection_matches_api_and_preserves_settings():

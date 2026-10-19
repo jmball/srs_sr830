@@ -87,7 +87,13 @@ class VirtualSR830(SR830):
         connection_kwargs(interface, resource_kwargs, interface_type=interface_type)
         self._simulation.settings["OUTX"] = interface
         self._simulation.enables = {name: 255 for name in self._simulation.enables}
+        self._io_desynchronized = False
         self._connected = True
+        try:
+            self.check_errors(operation="connect()")
+        except BaseException:
+            self._connected = False
+            raise
 
     def disconnect(self) -> None:
         """Return to local mode and disconnect; repeated calls are harmless."""
@@ -103,25 +109,38 @@ class VirtualSR830(SR830):
         if not self._connected:
             raise RuntimeError("Instrument is not connected.")
 
-    def _write(self, command: str) -> None:
+    def _raw_write(self, command: str) -> None:
         self._check_connected()
+        self._check_synchronized()
         self._simulation.write(command)
 
-    def _query(self, command: str) -> str:
+    def _raw_query(self, command: str) -> str:
         self._check_connected()
         if self._fast_running:
             raise RuntimeError("Stop fast transfer before issuing text queries.")
+        self._check_synchronized()
+        delay = max(0.0, self._simulation.busy_until - self._simulation.now())
+        self.advance_time(min(delay, self._virtual_timeout))
+        if delay > self._virtual_timeout:
+            self._io_desynchronized = True
+            raise pyvisa.errors.VisaIOError(pyvisa.constants.StatusCode.error_timeout)
         return self._simulation.query(command)
 
-    def _query_ascii_values(self, command: str) -> list[str]:
-        return self._query(command).split(",")
+    def _raw_query_ascii_values(self, command: str) -> list[str]:
+        return self._raw_query(command).split(",")
 
-    def _read_buffer_bytes(self, command: str, size: int) -> bytes:
+    def _raw_read_buffer_bytes(self, command: str, size: int) -> bytes:
         self._check_connected()
+        self._check_synchronized()
         data = self._simulation.buffer_bytes(command)
         if len(data) != size:
             raise OSError("Incomplete virtual binary response.")
         return data
+
+    def _recover_after_timeout(self) -> bool:
+        # The model produces complete responses synchronously and has no stale bytes.
+        self._check_connected()
+        return True
 
     @property
     def output_interface(self) -> int:

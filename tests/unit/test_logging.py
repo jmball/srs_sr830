@@ -1,9 +1,7 @@
 """Library logging policy checks without hardware."""
 
 import pytest
-from contextlib import redirect_stderr, redirect_stdout
 import inspect
-import io
 import subprocess
 import sys
 import warnings
@@ -19,60 +17,26 @@ def test_import_preserves_application_logging_and_warning_policy():
     assert result.stderr == ""
 
 
-def test_errors_return_results_without_reporting_them(caplog, driver, resource):
-    driver._instr = resource
-    cases = (
-        ([0], []),
-        ([1 << 4], ["Interface output buffer is non-empty"]),
-        ([1 << 2, 1 << 1], ["Battery backup has failed"]),
-        ([1 << 3, 1 << 0], ["Input or amplifier overload"]),
-        ([1 << 5, 1 << 2], ["Output queue overflow"]),
-    )
-    for replies, expected in cases:
-        resource.query.side_effect = [str(value) for value in replies]
-        stdout, stderr = (io.StringIO(), io.StringIO())
-        with redirect_stdout(stdout), redirect_stderr(stderr):
-            with warnings.catch_warnings(record=True) as captured:
-                warnings.simplefilter("always")
-                with caplog.at_level("DEBUG", logger="sr830"):
-                    assert driver.errors == expected
-                assert not caplog.records
-        assert stdout.getvalue() == ""
-        assert stderr.getvalue() == ""
-        assert captured == []
+def test_error_checks_raise_silently(caplog, driver, resource, query_replies, capsys):
+    from sr830 import InstrumentError
 
-
-def test_status_bits_decode_in_order_and_exclude_non_error_lia_bits(driver, resource):
     driver._instr = resource
-    resource.query.side_effect = [
-        str(1 << 2 | 1 << 3 | 1 << 4 | 1 << 5),
-        str(1 << 1 | 1 << 5),
-        str(1 << 0 | 1 << 2 | 1 << 7),
-        str(1 << 2 | 1 << 4),
-    ]
-    assert driver.errors == [
-        "Interface output buffer is non-empty",
-        "Battery backup has failed",
-        "GPIB fast data transfer mode aborted",
-        "Input or amplifier overload",
-        "Output overload",
-        "Output queue overflow",
-        "Command cannot execute/parameter out of range",
-    ]
-    assert [call.args[0] for call in resource.query.call_args_list] == [
-        "*STB?",
-        "ERRS?",
-        "LIAS?",
-        "*ESR?",
-    ]
+    query_replies["*ESR?"] = "32"
+    with warnings.catch_warnings(record=True) as captured:
+        with caplog.at_level("DEBUG", logger="sr830"):
+            with pytest.raises(InstrumentError, match="illegal command"):
+                driver.check_errors()
+    assert not caplog.records
+    assert captured == []
+    assert capsys.readouterr() == ("", "")
 
 
 def test_connection_diagnostics_are_debug_and_do_not_log_measurements(
-    caplog, driver, manager, resource
+    caplog, driver, manager, resource, query_replies
 ):
     with caplog.at_level("DEBUG", logger="sr830"):
         driver.connect("ASRL1::INSTR", resource_manager=manager)
-        resource.query.return_value = "1000"
+        query_replies["FREQ?"] = "1000"
         assert driver.reference_frequency == 1000.0
         driver.disconnect()
     assert [record.levelname for record in caplog.records] == ["DEBUG"] * 4

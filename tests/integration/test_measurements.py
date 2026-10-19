@@ -38,7 +38,5 @@ def test_snapshot(instrument):
     assert all(math.isfinite(value) for value in values)
 
 
-def test_errors_return_messages(instrument):
-    messages = instrument.errors
-    assert isinstance(messages, list)
-    assert all(isinstance(message, str) for message in messages)
+def test_command_error_check(instrument):
+    instrument.check_errors()

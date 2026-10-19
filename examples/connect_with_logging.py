@@ -1,4 +1,5 @@
 """Log identification and reference frequency from a real serial instrument."""
+
 import logging
 import sys
 
@@ -19,9 +20,9 @@ def main() -> None:
         instrument.connect("ASRL2::INSTR", baud_rate=9600)
         logger.info("Connected: %s", instrument.idn)
         logger.info("Reference frequency = %s Hz", instrument.reference_frequency)
-        errors = instrument.errors
-        if errors:
-            logger.warning("Instrument reported errors: %s", ", ".join(errors))
+        # Driver operations raise InstrumentError for reported instrument faults.
+        # Applications choose how to handle/report the exception.
+        instrument.check_errors()
 
 
 if __name__ == "__main__":

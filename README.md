@@ -240,7 +240,8 @@ acquisition paused. The instrument cannot reliably report whether an existing
 scan is paused, so this is an explicit policy rather than an inferred restoration.
 One-shot scans are not automatically paused or restarted.
 
-`wait_until_ready(timeout=10)` waits for command completion, using native VISA
+Normal checked writes already wait for command completion.
+`wait_until_ready(timeout=10)` can wait for independently initiated operations, using native VISA
 status polling where supported and a queued query otherwise. `wait_for_settling(
 timeout=60, time_constants=10)` additionally waits the requested multiple of the
 selected low-pass time constant. Both use seconds and raise `TimeoutError` when
@@ -336,17 +337,50 @@ The driver does not change global warning handling. Applications can call
 Serial binary-transfer warnings identify the caller's location and can also be
 handled through the standard `warnings` module.
 
-`instrument.errors` returns an error list without printing, logging, or issuing
-warnings. The application chooses how to report it:
+Normal writes and successful queries check `*ESR?` and `ERRS?` directly,
+independently of status enable masks. The queued check after a write also waits
+for the preceding command to finish. `check_errors()` performs the same check
+explicitly. Reported command, execution, queue, and device faults raise the
+public `InstrumentError`, exported by both packages:
 
 ```python
-errors = instrument.errors
-if errors:
-    logging.getLogger(__name__).warning("Instrument reported errors: %s", ", ".join(errors))
+from sr830 import InstrumentError
+
+try:
+    instrument.reference_frequency = 1000
+except InstrumentError as exc:
+    logging.getLogger(__name__).error("%s (registers: %s)", exc, exc.registers)
 ```
 
-Reading `errors` queries status registers and can clear their latched events;
-see the [SR830 status-register documentation](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf).
+The exception carries `operation`, `errors` (decoded descriptions), and
+`registers` (raw bytes keyed by query, such as `"*ESR?"`). Faults are detected
+after the operation and may have been latched earlier. `measure()`,
+`read_display()`, `measure_multiple()`, and buffer readers also check `LIAS?`
+for overload and reference unlock; call `check_measurement_status()` explicitly
+when needed. Configuration operations leave measurement status alone so callers
+can correct an overload or unlock. Auxiliary voltage reads only check command
+and device errors. FAST streaming defers checks until `pause()`, buffer reset,
+instrument reset, or disabling FAST, after pending binary output is cleared;
+streamed counts remain provisional until that check succeeds.
+
+These checks read and clear event registers, including ordinary events such as
+power-on, triggers, and time-constant changes. Those events and message-available
+status are not errors. Explicit `get_status_byte()` and `serial_poll()` remain
+available for raw diagnostics without automatic checks. If preserving event
+history matters, account for the automatic register reads. See the
+[SR830 programming manual](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf).
+
+A query timeout can indicate a rejected command, a slow response, or a transport
+problem. On native GPIB the driver attempts VISA device clear and error checks
+with a one-second diagnostic I/O timeout. A confirmed fault raises
+`InstrumentError` chained from the original VISA timeout; an inconclusive check
+or no reported fault preserves the original timeout. Serial and ambiguous
+adapter transports cannot guarantee that a delayed response has been discarded,
+so they preserve the timeout without sending diagnostic queries. Reconnect after
+an unrecovered timeout or incomplete binary response before further I/O. The
+normal VISA timeout still controls ordinary operations. No automatic command
+retry is performed. Recovery and adapter behavior require hardware validation.
+
 The [logging example](examples/connect_with_logging.py) configures output and warning capture
 at the application level.
 

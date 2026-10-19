@@ -119,13 +119,19 @@ Hardware tests exercise real I/O and temporarily change input configuration,
 sensitivity, filters, reference and auxiliary outputs, displays, and local mode.
 Fixtures attempt to restore changed properties even after failed assertions;
 cleanup failures are reported. Connection initialization enables status registers,
-status queries clear latched events, and disconnect returns the front panel to
+normal I/O checks and clears command/device event registers, measurements check
+overload/unlock latches, and disconnect returns the front panel to
 local mode. Buffer tests stop acquisition and erase the existing trace buffers;
 previous buffer contents and scan activity cannot be restored.
 
 The virtual driver models demodulated signals, settling, acquisition, registers,
 and saved setups. Unit simulation tests inject a fixed clock and advance time
 without sleeping; integration fixtures acquire actual simulated buffer points.
+Instrument faults raise `InstrumentError`; input validation still raises
+`ValueError`, and unconfirmed transport failures preserve VISA exceptions.
+Hardware measurements require an input/reference configuration without overload
+or unlock faults. `unit/test_errors.py` covers fault decoding and timeout recovery
+with fake resources.
 See the [simulation guide](../README.md#simulation) for controls and physical scope.
 Physical signal accuracy and transport compatibility require a hardware run.
 

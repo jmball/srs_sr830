@@ -3,6 +3,7 @@
 import math
 
 import pytest
+from sr830 import InstrumentError
 
 from sr830 import (
     Channel1Display,
@@ -127,9 +128,9 @@ def test_display_ratios_use_channel_aux_inputs(
 def test_zero_display_ratio_denominator_sets_overload(simulation):
     simulation.set_signal(0.003, settle=True)
     simulation.set_display(1, Channel1Display.X, Channel1Ratio.AUX_IN_1)
-    assert simulation.read_display(1) == 0
-    status = simulation.get_status_byte(StatusRegister.LIA_STATUS)
-    assert status & LiaStatusFlag.OUTPUT_OVERLOAD
+    with pytest.raises(InstrumentError, match="Output overload") as caught:
+        simulation.read_display(1)
+    assert caught.value.registers["LIAS?"] & LiaStatusFlag.OUTPUT_OVERLOAD
 
 
 def test_snap_includes_reference_frequency(simulation):
@@ -167,7 +168,7 @@ def test_external_reference_lock_and_internal_frequency_are_separate(simulation)
     simulation.reference_source = ReferenceSource.EXTERNAL
     simulation.set_external_reference(42)
     assert simulation.reference_frequency == 42
-    with pytest.raises(ValueError, match="internal reference"):
+    with pytest.raises(InstrumentError, match="cannot execute"):
         simulation.reference_frequency = 200
     simulation.set_external_reference(42, locked=False)
     assert simulation.reference_frequency == 0
@@ -178,7 +179,7 @@ def test_external_reference_lock_and_internal_frequency_are_separate(simulation)
 def test_auto_settings_have_measurement_effects_and_busy_state(simulation):
     simulation.set_signal(0.003, 0.004, settle=True)
     simulation.auto_phase()
-    assert not simulation.serial_poll() & SerialPollFlag.NO_COMMAND_IN_PROGRESS
+    # The checked write already waited for command completion.
     simulation.wait_until_ready()
     assert simulation.serial_poll() & SerialPollFlag.NO_COMMAND_IN_PROGRESS
     assert simulation.measure(2) == pytest.approx(0, abs=1e-12)
@@ -199,7 +200,7 @@ def test_auto_gain_obeys_long_time_constant_constraint(simulation):
 
 
 def test_completion_and_settling_timeout(simulation):
-    simulation.auto_phase()
+    simulation._raw_write("APHS")
     with pytest.raises(TimeoutError):
         simulation.wait_until_ready(timeout=0.01)
     simulation.wait_until_ready()
@@ -225,21 +226,20 @@ def test_save_and_recall_copy_complete_configuration(simulation):
     simulation.set_aux_out(1, 1)
     simulation.recall_setup(1)
     assert simulation.get_aux_out(1) == 0.5
-    with pytest.raises(ValueError, match="No setup saved"):
+    with pytest.raises(InstrumentError, match="cannot execute") as caught:
         simulation.recall_setup(2)
-    assert (
-        simulation.get_status_byte("standard_event") & StandardEventFlag.EXECUTION_ERROR
-    )
+    assert caught.value.registers["*ESR?"] & StandardEventFlag.EXECUTION_ERROR
 
 
 def test_reset_preserves_interface_and_status_registers(simulation):
     simulation.output_interface = 0
-    simulation.inject_status("error", ErrorFlag.RAM_ERROR)
     simulation.set_enable_register("error", ErrorFlag.RAM_ERROR)
-    simulation.reset()
+    simulation.inject_status("error", ErrorFlag.RAM_ERROR)
+    # Inspect the protocol operation before automatic checks consume the latch.
+    simulation._raw_write("*RST")
+    assert simulation.get_status_byte("error") == ErrorFlag.RAM_ERROR
     assert simulation.output_interface == 0
     assert simulation.get_enable_register("error") == ErrorFlag.RAM_ERROR
-    assert simulation.get_status_byte("error") == ErrorFlag.RAM_ERROR
     assert simulation.sensitivity == Sensitivity.x1
     assert simulation.time_constant == TimeConstant.ms_100
     assert simulation.sample_rate == SampleRate.Hz_1
@@ -250,8 +250,9 @@ def test_register_masks_bit_writes_and_clear_on_read(simulation):
     simulation.set_enable_register("error", 0)
     simulation.inject_status("error", ErrorFlag.RAM_ERROR | ErrorFlag.ROM_ERROR)
     assert not simulation.get_status_byte("serial_poll") & SerialPollFlag.ERROR
-    simulation.set_enable_register("error", 1, decimal=False, bit=2)
-    assert simulation.get_enable_register("error") == 4
+    # Raw I/O deliberately preserves the fault latches for this register test.
+    simulation._raw_write("ERRE 2,1")
+    assert simulation._raw_query("ERRE?") == "4"
     assert simulation.get_status_byte("serial_poll") & SerialPollFlag.ERROR
     assert simulation.get_status_byte("error", 2) == 1
     assert simulation.get_status_byte("error") == ErrorFlag.ROM_ERROR
@@ -350,7 +351,7 @@ def test_fast_data_sets_message_available_status(simulation):
 
 
 def test_non_normalized_buffer_handles_mantissa_rounding_boundary(simulation):
-    sample = math.nextafter(2.0, 0.0)
+    sample = math.nextafter(0.5, 0.0)
     simulation.set_signal(sample, settle=True)
     simulation.sample_rate = SampleRate.Hz_1
     simulation.start()
@@ -386,20 +387,27 @@ def test_fast2_queue_overflow_latches_error_and_disables_transfer(simulation):
     simulation.data_transfer_mode = DataTransferMode.WINDOWS
     simulation.start()
     simulation.advance_time(1)
-    simulation.pause()
+    with pytest.raises(
+        InstrumentError, match="fast data transfer mode aborted"
+    ) as caught:
+        simulation.pause()
     assert simulation.data_transfer_mode == DataTransferMode.OFF
-    assert simulation.get_status_byte(StatusRegister.ERROR) & ErrorFlag.GPIB_ERROR
+    assert caught.value.registers["ERRS?"] & ErrorFlag.GPIB_ERROR
 
 
 def test_signal_callback_drives_acquisition_at_sample_times():
-    simulation = VirtualSR830(clock=lambda: 0.0, signal=lambda t: complex(t, -t))
+    simulation = VirtualSR830(
+        clock=lambda: 0.0, signal=lambda t: complex(t / 10, -t / 10)
+    )
     simulation.connect("GPIB0::8::INSTR")
     simulation.sample_rate = SampleRate.Hz_1
     simulation.time_constant = TimeConstant.us_10
     simulation.start()
     simulation.advance_time(3)
-    assert simulation.get_ascii_buffer_data(1, 0, 3) == (1.0, 2.0, 3.0)
-    assert simulation.get_ascii_buffer_data(2, 0, 3) == (-1.0, -2.0, -3.0)
+    assert simulation.get_ascii_buffer_data(1, 0, 3) == pytest.approx((0.1, 0.2, 0.3))
+    assert simulation.get_ascii_buffer_data(2, 0, 3) == pytest.approx(
+        (-0.1, -0.2, -0.3)
+    )
 
 
 @pytest.mark.parametrize(

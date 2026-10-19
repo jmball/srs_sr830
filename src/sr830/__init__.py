@@ -48,3 +48,5 @@ from .settings import (
     LiaStatusBit as LiaStatusBit,
     LiaStatusFlag as LiaStatusFlag,
 )
+
+from sr830.exceptions import InstrumentError as InstrumentError

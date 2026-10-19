@@ -8,10 +8,13 @@ import pytest
 from sr830 import DataTransferMode
 
 
-def test_fast_transfer_decodes_signed_pairs_without_query(mock_instrument, resource):
-    resource.query.side_effect = ["1", "2"]  # OUTX?, FAST?
+def test_fast_transfer_decodes_signed_pairs_without_query(
+    mock_instrument, resource, query_replies
+):
+    query_replies.update({"OUTX?": "1", "FAST?": "2"})
     mock_instrument.data_transfer_mode = DataTransferMode.WINDOWS
     mock_instrument.start()
+    queries_before_stream = resource.query.call_count
     resource.timeout = 5000
     resource.read_termination = "\n"
     resource.read_bytes.return_value = struct.pack("<hhhh", -30000, 123, 32767, -32768)
@@ -19,7 +22,7 @@ def test_fast_transfer_decodes_signed_pairs_without_query(mock_instrument, resou
         (-30000, 123),
         (32767, -32768),
     )
-    assert resource.query.call_count == 2
+    assert resource.query.call_count == queries_before_stream
     assert resource.timeout == 5000
     assert resource.read_termination == "\n"
     with pytest.raises(RuntimeError, match="Stop fast"):
@@ -86,13 +89,14 @@ def test_disabling_fast_mode_discards_queued_bytes(mock_instrument, resource):
 
 
 def test_trigger_tracks_a_fast_stream_without_querying_after_start(
-    mock_instrument, resource
+    mock_instrument, resource, query_replies
 ):
-    resource.query.side_effect = ["1", "2"]  # TSTR?, FAST?
+    query_replies.update({"TSTR?": "1", "FAST?": "2"})
     mock_instrument.trigger()
     assert mock_instrument._fast_running
+    queries_before_stream = resource.query.call_count
     mock_instrument.trigger()
-    assert resource.query.call_count == 2
+    assert resource.query.call_count == queries_before_stream
     assert resource.write.call_count == 2
 
 

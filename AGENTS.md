@@ -22,6 +22,7 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
 - `examples/connect_with_logging.py`: logging and serial connection example. Running it
   opens a real resource.
 - `src/sr830/_connection.py`: shared interface inference and framing validation.
+- `src/sr830/exceptions.py`: InstrumentError and shared fault decoding.
 - `src/sr830/settings.py`: public setting/selector enums, documented units and
   meanings, and private protocol mappings/validation shared by both drivers.
   Enum values are instrument command codes, not physical values. There is no
@@ -70,9 +71,12 @@ The hardware class is `sr830.SR830`; the virtual class is
 - Follow the existing four-space indentation, snake_case methods and properties,
   and NumPy-style docstrings describing parameters, ranges, and units.
 - The hardware VISA resource is private (`self._instr`). Driver I/O uses
-  guarded `_write()`, `_query()`, `_query_ascii_values()`, and
-  `_read_buffer_bytes()` helpers. Inline guards raise RuntimeError when
-  disconnected, using a shared message constant. Direct resource access is reserved for
+  checked `_write()`, `_query()`, `_query_ascii_values()`, and
+  `_read_buffer_bytes()` helpers, backed by raw transport helpers. Normal I/O
+  checks command/device faults through *ESR?/ERRS?; measurements additionally
+  check LIAS?. Explicit status reads bypass automatic checks. FAST checks wait
+  until pending stream bytes have been cleared. Inline guards raise RuntimeError
+  when disconnected, using a shared message constant. Direct resource access is reserved for
   connection lifecycle and framing configuration. Setters validate values before
   writing commands. Preserve command spelling, channel numbering, and
   interface-specific binary transfer behavior.
@@ -82,11 +86,12 @@ The hardware class is `sr830.SR830`; the virtual class is
   compatibility.
 - Keep logging configuration in applications. The driver uses a module logger
   with NullHandler and DEBUG lifecycle diagnostics; it must not configure the
-  root logger, capture warnings globally, or print. The `errors` property returns
-  its list silently. Serial-transfer warnings use `stacklevel=2`.
+  root logger, capture warnings globally, or print. Instrument faults raise
+  InstrumentError silently; check_errors() replaces the removed errors property.
+  Serial-transfer warnings use `stacklevel=2`.
 - No CI, formatter, or linter is configured. Both packages ship `py.typed`.
   Driver annotations can be checked with `uv run --locked mypy --strict --follow-imports=silent
-  src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py
+  src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py src/sr830/exceptions.py
   src/virtual_sr830/virtual_sr830.py src/virtual_sr830/_simulation.py` (included in the dev group).
 
 ## Setup and validation
@@ -161,6 +166,9 @@ the hardware driver's context manager calls `disconnect()` on exit.
 - FAST transfers are GPIB-only, decoded as signed little-endian X/Y count pairs.
   Guard text queries while streaming; stop/discard pending FAST output with VISA
   clear before returning to text I/O. Preserve framing and timeout on failures.
+- Query-timeout recovery attempts device clear and diagnostics only on native
+  GPIB; preserve the original VISA timeout if no fault is confirmed. Unrecovered
+  timeouts and short binary responses require reconnecting before further I/O.
 - Completion/settling helpers have finite timeout budgets. Settling estimates a
   multiple of the low-pass time constant, not physical measurement stability.
 - Simulation tests use an injected clock and advance_time(), not real sleeps.

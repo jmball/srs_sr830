@@ -26,8 +26,8 @@ def test_default_backend_never_constructs_a_visa_manager():
         factory.assert_not_called()
 
 
-def test_explicit_hardware_backend_and_serial_options(manager, resource):
-    resource.query.return_value = "Stanford_Research_Systems,SR830,1234,1.07"
+def test_explicit_hardware_backend_and_serial_options(manager, resource, query_replies):
+    query_replies["*IDN?"] = "Stanford_Research_Systems,SR830,1234,1.07"
     options = InstrumentOptions(
         resource_name="serial-alias",
         visa_backend="@py",
@@ -57,9 +57,9 @@ def test_explicit_hardware_backend_and_serial_options(manager, resource):
 
 @pytest.mark.parametrize("failure_stage", ["open", "identity", "test"])
 def test_hardware_failure_closes_owned_connections_and_never_falls_back(
-    manager, resource, failure_stage
+    manager, resource, query_replies, failure_stage
 ):
-    resource.query.return_value = "SRS,SR830,1234,1.07"
+    query_replies["*IDN?"] = "SRS,SR830,1234,1.07"
     if failure_stage == "open":
         manager.open_resource.side_effect = OSError("open failed")
     elif failure_stage == "identity":
@@ -75,9 +75,9 @@ def test_hardware_failure_closes_owned_connections_and_never_falls_back(
 
 @pytest.mark.parametrize("identity", ["other-device", "Vendor,OTHER_MODEL,1234,1.0"])
 def test_wrong_device_is_closed_before_tests_can_change_settings(
-    manager, resource, identity
+    manager, resource, query_replies, identity
 ):
-    resource.query.return_value = identity
+    query_replies["*IDN?"] = identity
     with patch("tests.support.pyvisa.ResourceManager", return_value=manager):
         with pytest.raises(AssertionError, match="Expected an SR830"):
             with open_instrument(InstrumentOptions(resource_name="wrong-model")):

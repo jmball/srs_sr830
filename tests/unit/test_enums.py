@@ -14,13 +14,13 @@ def test_virtual_package_enum_is_accepted_by_hardware_driver(mock_instrument, re
 
 
 def test_snap_serializes_codes_independently_of_enum_string_format(
-    mock_instrument, resource
+    mock_instrument, resource, query_replies
 ):
     # IntEnum.__str__ differs across supported Python versions. Wire codes must not.
     with patch.object(
         settings.MeasurementParameter, "__str__", lambda member: member.name
     ):
-        resource.query.return_value = "0.003,1000"
+        query_replies["SNAP? 1,9"] = "0.003,1000"
         values = mock_instrument.measure_multiple(
             [
                 settings.MeasurementParameter.X,
@@ -28,7 +28,7 @@ def test_snap_serializes_codes_independently_of_enum_string_format(
             ]
         )
         assert tuple(values) == (0.003, 1000.0)
-    resource.query.assert_called_once_with("SNAP? 1,9")
+    resource.query.assert_any_call("SNAP? 1,9")
 
 
 @pytest.mark.parametrize(
@@ -133,6 +133,7 @@ def test_unrelated_enums_are_rejected_even_when_codes_are_valid(
 def test_register_wire_contract(
     mock_instrument,
     resource,
+    query_replies,
     register,
     mask,
     bit,
@@ -147,11 +148,11 @@ def test_register_wire_contract(
         register, settings.SwitchState.ON, decimal=False, bit=bit
     )
     resource.write.assert_called_with(f"{command} {position},1")
-    resource.query.return_value = "1"
+    query_replies.update({f"{command}? {position}": "1", expected_status_query: "1"})
     assert mock_instrument.get_enable_register(register, bit) == 1
-    resource.query.assert_called_with(f"{command}? {position}")
+    resource.query.assert_any_call(f"{command}? {position}")
     assert mock_instrument.get_status_byte(register, bit) == 1
-    resource.query.assert_called_with(expected_status_query)
+    resource.query.assert_any_call(expected_status_query)
 
 
 def test_enable_all_status_bytes_writes_all_four_registers(mock_instrument, resource):
