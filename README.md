@@ -90,6 +90,34 @@ Both packages ship inline type hints. `measure_multiple()` returns an iterator
 of floats; buffer readers return tuples. Integer protocol fields reject floats
 and booleans rather than silently coercing them.
 
+## Configuration and measurement example
+
+Run the example with the virtual instrument (no VISA resource or hardware is
+opened):
+
+```sh
+uv run --locked python examples/configure_and_measure.py
+```
+
+To use a real instrument, pass its VISA resource name. This example changes the
+reference source, harmonic, and frequency, input configuration, sensitivity,
+time constant, filter slope, and reserve mode; connect any signal source with
+those settings in mind. It selects the fundamental harmonic, normal reserve, a
+12 dB/octave slope, then a 100 ms time constant, and waits an estimated ten
+time constants (one second).
+Supply `--output-interface 0` or `1` when an adapter's instrument-side
+interface cannot be inferred. For serial hardware, also supply its baud rate
+and install the serial extra if needed:
+
+```sh
+uv run --locked --extra serial python examples/configure_and_measure.py \
+    --resource-name "ASRL2::INSTR" --baud-rate 9600
+```
+
+`--visa-backend @py` can select the PyVISA-py backend. The script reports
+simulated RMS voltage components by default; with hardware it reports the
+instrument's measured X, Y, R, and phase.
+
 ## Named settings
 
 Discrete settings accept their named enums or the existing integer codes. Enum
