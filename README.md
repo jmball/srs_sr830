@@ -92,8 +92,11 @@ and booleans rather than silently coercing them.
 
 ## Configuration and measurement examples
 
-Both examples show connection, configuration, settling, and coherent X/Y/R/phase
-measurements inline in `main()`.
+Both examples show connection, reference/input/filter/control settings,
+acquisition choices, display and front-output selection, auxiliary outputs, and
+status enable masks inline in `main()`, followed by settling and coherent
+X/Y/R/phase measurements. The hardware example puts its command-line options in
+`parse_args()` and defaults to the PyVISA-py backend (`@py`).
 
 Run [the virtual example](examples/configure_and_measure_virtual.py) without
 hardware:
@@ -106,11 +109,14 @@ It supplies simulated 3 mV X and 4 mV Y RMS components. Waiting for settling
 advances simulated time without sleeping.
 
 [The hardware example](examples/configure_and_measure.py) requires an explicit
-VISA resource. It changes reference source, harmonic and frequency, input
-configuration, sensitivity, time constant, filter slope, and reserve mode; connect
-a suitable signal source before running. It selects the fundamental harmonic,
-137 Hz internal reference, 10 mV sensitivity, normal reserve, 12 dB/octave slope,
-and a 100 ms time constant, then waits an estimated ten time constants.
+VISA resource. It changes reference, input, filter, front-panel, and acquisition
+settings; connect a suitable signal source before running. It selects the
+fundamental harmonic, 137 Hz internal reference, 10 mV sensitivity, normal
+reserve, 12 dB/octave slope, and a 100 ms time constant, then waits an estimated
+ten time constants. Display channels use R and phase with no ratio, output
+expansion stays at unity with zero offset, auxiliary outputs are set to zero,
+and FAST transfer remains off. It also enables selected error-register events
+and sets power-on status clearing.
 
 ```sh
 uv run --locked python examples/configure_and_measure.py \
@@ -120,8 +126,9 @@ uv run --locked --extra serial python examples/configure_and_measure.py \
     --resource-name "ASRL2::INSTR" --baud-rate 9600
 ```
 
-Use `--output-interface 0` or `1` for ambiguous adapters, and `--visa-backend @py`
-to select PyVISA-py. Run the hardware example with `--help` for all options.
+Use `--output-interface 0` or `1` for ambiguous adapters. The default
+`--visa-backend` is `@py` (PyVISA-py); pass another backend name to override it.
+Run the hardware example with `--help` for all options.
 
 ## Named settings
 
