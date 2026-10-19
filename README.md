@@ -348,13 +348,12 @@ from sr830 import InstrumentError
 
 try:
     instrument.reference_frequency = 1000
-except InstrumentError as exc:
-    logging.getLogger(__name__).error("%s (registers: %s)", exc, exc.registers)
+except InstrumentError:
+    logging.getLogger(__name__).exception("Instrument fault")
 ```
 
-The exception carries `operation`, `errors` (decoded descriptions), and
-`registers` (raw bytes keyed by query, such as `"*ESR?"`). Faults are detected
-after the operation and may have been latched earlier. `measure()`,
+The exception message describes the detected faults; the traceback identifies
+the operation. Faults may have been latched earlier. `measure()`,
 `read_display()`, `measure_multiple()`, and buffer readers also check `LIAS?`
 for overload and reference unlock; call `check_measurement_status()` explicitly
 when needed. Configuration operations leave measurement status alone so callers

@@ -6,6 +6,7 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
+from .sr830 import InstrumentError as InstrumentError
 from .sr830 import SR830 as SR830
 
 from .settings import (
@@ -48,5 +49,3 @@ from .settings import (
     LiaStatusBit as LiaStatusBit,
     LiaStatusFlag as LiaStatusFlag,
 )
-
-from sr830.exceptions import InstrumentError as InstrumentError

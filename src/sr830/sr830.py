@@ -21,7 +21,6 @@ import pyvisa
 from pyvisa.constants import SerialTermination
 from pyvisa.resources import MessageBasedResource, SerialInstrument
 
-from .exceptions import InstrumentError, _check_registers
 from ._connection import connection_kwargs, resolve_output_interface
 from .settings import (
     AuxiliaryChannel,
@@ -76,6 +75,37 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 _NOT_CONNECTED_MESSAGE = "Instrument is not connected."
+
+
+_FAULTS = {
+    "*ESR?": (
+        (StandardEventFlag.INPUT_QUEUE_OVERFLOW, "Input queue overflow"),
+        (StandardEventFlag.OUTPUT_QUEUE_OVERFLOW, "Output queue overflow"),
+        (
+            StandardEventFlag.EXECUTION_ERROR,
+            "Command cannot execute/parameter out of range",
+        ),
+        (StandardEventFlag.COMMAND_ERROR, "Received illegal command"),
+    ),
+    "ERRS?": (
+        (ErrorFlag.BACKUP_ERROR, "Battery backup has failed"),
+        (ErrorFlag.RAM_ERROR, "RAM memory test found error"),
+        (ErrorFlag.ROM_ERROR, "ROM memory test found error"),
+        (ErrorFlag.GPIB_ERROR, "GPIB fast data transfer mode aborted"),
+        (ErrorFlag.DSP_ERROR, "DSP test found error"),
+        (ErrorFlag.MATH_ERROR, "Internal math error"),
+    ),
+    "LIAS?": (
+        (LiaStatusFlag.INPUT_OVERLOAD, "Input or amplifier overload"),
+        (LiaStatusFlag.FILTER_OVERLOAD, "Time constant filter overload"),
+        (LiaStatusFlag.OUTPUT_OVERLOAD, "Output overload"),
+        (LiaStatusFlag.REFERENCE_UNLOCK, "Reference unlock detected"),
+    ),
+}
+
+
+class InstrumentError(RuntimeError):
+    """The SR830 reported command, device, or measurement faults."""
 
 
 class SR830:
@@ -246,7 +276,7 @@ class SR830:
             resource.write(f"OUTX {interface}")
             for command in _ENABLE_REGISTER_COMMANDS.values():
                 resource.write(f"{command} 255")
-            _check_registers(resource.query, ("*ESR?", "ERRS?"), "connect()")
+            self._check_registers("*ESR?", "ERRS?", resource=resource)
         except BaseException:
             # Preserve the initialization error even if close also fails.
             with suppress(Exception):
@@ -293,7 +323,29 @@ class SR830:
                 "Response framing is uncertain after an I/O failure; disconnect and reconnect."
             )
 
-    def check_errors(self, *, operation: str = "check_errors()") -> None:
+    def _check_registers(
+        self, *commands: str, resource: MessageBasedResource | None = None
+    ) -> None:
+        """Read and decode faults; resource is only used before connect publishes it."""
+        query = self._raw_query if resource is None else resource.query
+        errors: list[str] = []
+        try:
+            for command in commands:
+                value = int(query(command))
+                if not 0 <= value <= 255:
+                    raise OSError(f"Invalid status response to {command}: {value}")
+                errors.extend(
+                    message for flag, message in _FAULTS[command] if value & flag
+                )
+        except Exception as exc:
+            # Preserve a confirmed fault if a later diagnostic query fails.
+            if errors:
+                raise InstrumentError("; ".join(errors)) from exc
+            raise
+        if errors:
+            raise InstrumentError("; ".join(errors))
+
+    def check_errors(self) -> None:
         """Raise InstrumentError for command/execution and device faults.
 
         Reads *ESR? and ERRS? directly, independently of enable masks. These
@@ -302,27 +354,23 @@ class SR830:
         separately by check_measurement_status(). Automatic checks are deferred
         during FAST; explicit checks raise RuntimeError until streaming stops.
         """
-        _check_registers(self._raw_query, ("*ESR?", "ERRS?"), operation)
+        self._check_registers("*ESR?", "ERRS?")
 
-    def check_measurement_status(
-        self, *, operation: str = "check_measurement_status()"
-    ) -> None:
+    def check_measurement_status(self) -> None:
         """Raise InstrumentError for latched overload or reference-unlock faults.
 
         Reads and clears LIAS?, including ordinary events such as triggers.
         Measurement readers call this automatically. Configuration writes leave
         this register alone, allowing callers to fix an overload or unlock.
         """
-        _check_registers(self._raw_query, ("LIAS?",), operation)
+        self._check_registers("LIAS?")
 
     def _write(self, command: str) -> None:
         self._raw_write(command)
         if not self._fast_running:
-            self.check_errors(operation=command)
+            self.check_errors()
 
-    def _diagnose_timeout(
-        self, command: str, failure: pyvisa.errors.VisaIOError
-    ) -> None:
+    def _diagnose_timeout(self, failure: pyvisa.errors.VisaIOError) -> None:
         # A delayed response could otherwise be mistaken for a status register.
         self._io_desynchronized = True
         try:
@@ -330,7 +378,7 @@ class SR830:
                 if not self._recover_after_timeout():
                     return
                 self._io_desynchronized = False
-                self.check_errors(operation=command)
+                self.check_errors()
         except InstrumentError as exc:
             raise exc from failure
         except Exception:
@@ -351,9 +399,9 @@ class SR830:
             result = self._raw_query(command)
         except pyvisa.errors.VisaIOError as exc:
             if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
-                self._diagnose_timeout(command, exc)
+                self._diagnose_timeout(exc)
             raise
-        self.check_errors(operation=command)
+        self.check_errors()
         return result
 
     def _query_ascii_values(self, command: str) -> list[str]:
@@ -361,9 +409,9 @@ class SR830:
             result = self._raw_query_ascii_values(command)
         except pyvisa.errors.VisaIOError as exc:
             if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
-                self._diagnose_timeout(command, exc)
+                self._diagnose_timeout(exc)
             raise
-        self.check_errors(operation=command)
+        self.check_errors()
         return result
 
     def _read_buffer_bytes(self, command: str, size: int) -> bytes:
@@ -371,13 +419,13 @@ class SR830:
             result = self._raw_read_buffer_bytes(command, size)
         except pyvisa.errors.VisaIOError as exc:
             if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
-                self._diagnose_timeout(command, exc)
+                self._diagnose_timeout(exc)
             raise
         except OSError:
             self._io_desynchronized = True
             raise
         # The raw reader has restored text framing before diagnostics.
-        self.check_errors(operation=command)
+        self.check_errors()
         return result
 
     # --- Reference and phase commands ---
@@ -1056,7 +1104,7 @@ class SR830:
                 with suppress(Exception):
                     resource.read_termination = previous
                 raise
-            self.check_errors(operation=f"OUTX {int(interface)}")
+            self.check_errors()
         else:
             raise ValueError(
                 f"Invalid output interface: {interface}. Must be 0 (RS232) or 1 "
@@ -1714,8 +1762,8 @@ class SR830:
             self._raw_write("PAUS")
             self._discard_fast_data()
             self._fast_running = False
-            self.check_errors(operation="PAUS")
-            self.check_measurement_status(operation="PAUS")
+            self.check_errors()
+            self.check_measurement_status()
         else:
             self._write("PAUS")
 
@@ -1728,8 +1776,8 @@ class SR830:
             self._raw_write("REST")
             self._discard_fast_data()
             self._fast_running = False
-            self.check_errors(operation="REST")
-            self.check_measurement_status(operation="REST")
+            self.check_errors()
+            self.check_measurement_status()
         else:
             self._write("REST")
 
@@ -1756,7 +1804,7 @@ class SR830:
         _validate_enum(parameter, MeasurementParameter)
         if parameter in range(1, 5):
             value = float(self._query(f"OUTP? {int(parameter)}"))
-            self.check_measurement_status(operation=f"OUTP? {int(parameter)}")
+            self.check_measurement_status()
             return value
         else:
             raise ValueError(
@@ -1783,7 +1831,7 @@ class SR830:
         _validate_enum(channel, Channel)
         if channel in [1, 2]:
             value = float(self._query(f"OUTR? {int(channel)}"))
-            self.check_measurement_status(operation=f"OUTR? {int(channel)}")
+            self.check_measurement_status()
             return value
         else:
             raise ValueError(f"Invalid channel: {channel}. Must be 0 (Ch1) or 1 (Ch2).")
@@ -1835,7 +1883,7 @@ class SR830:
         ):
             parameter_text = ",".join([str(int(i)) for i in parameters])
             values = self._query(f"SNAP? {parameter_text}").split(",")
-            self.check_measurement_status(operation=f"SNAP? {parameter_text}")
+            self.check_measurement_status()
             return (float(i) for i in values)
         else:
             raise ValueError(
@@ -1881,7 +1929,7 @@ class SR830:
         if start_bin + bins > self.buffer_size:
             raise ValueError("Requested range exceeds the stored buffer points.")
         yield
-        self.check_measurement_status(operation="buffer read")
+        self.check_measurement_status()
         # Deliberately do not resume after transfer/decoding failures.
         if loop and resume:
             self.start()
@@ -2023,8 +2071,8 @@ class SR830:
                 was_running = self._fast_running
                 self._fast_running = False
                 if was_running:
-                    self.check_errors(operation="FAST 0")
-                    self.check_measurement_status(operation="FAST 0")
+                    self.check_errors()
+                    self.check_measurement_status()
         else:
             raise ValueError(
                 f"Invalid data transfer mode: {mode}. Must be 0 (off), 1 (on [DOS]), "
@@ -2039,8 +2087,8 @@ class SR830:
             self._raw_write("*RST")
             self._discard_fast_data()
             self._fast_running = False
-            self.check_errors(operation="*RST")
-            self.check_measurement_status(operation="*RST")
+            self.check_errors()
+            self.check_measurement_status()
         else:
             self._write("*RST")
 

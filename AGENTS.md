@@ -6,7 +6,8 @@ This repository provides Python control of a Stanford Research Systems SR830
 lock-in amplifier over PyVISA, plus a virtual instrument for development.
 
 - `src/sr830/sr830.py`: hardware driver, VISA connection lifecycle, instrument
-  settings, measurements, buffer transfers, and status registers.
+  settings, measurements, buffer transfers, status registers, InstrumentError,
+  and fault decoding.
 - `src/virtual_sr830/virtual_sr830.py`: simulator inheriting the hardware public
   interface, with connection/I/O adapters and simulation controls.
 - `src/virtual_sr830/_simulation.py`: stateful demodulated-signal model, filters,
@@ -22,7 +23,6 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
 - `examples/connect_with_logging.py`: logging and serial connection example. Running it
   opens a real resource.
 - `src/sr830/_connection.py`: shared interface inference and framing validation.
-- `src/sr830/exceptions.py`: InstrumentError and shared fault decoding.
 - `src/sr830/settings.py`: public setting/selector enums, documented units and
   meanings, and private protocol mappings/validation shared by both drivers.
   Enum values are instrument command codes, not physical values. There is no
@@ -91,7 +91,7 @@ The hardware class is `sr830.SR830`; the virtual class is
   Serial-transfer warnings use `stacklevel=2`.
 - No CI, formatter, or linter is configured. Both packages ship `py.typed`.
   Driver annotations can be checked with `uv run --locked mypy --strict --follow-imports=silent
-  src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py src/sr830/exceptions.py
+  src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py
   src/virtual_sr830/virtual_sr830.py src/virtual_sr830/_simulation.py` (included in the dev group).
 
 ## Setup and validation

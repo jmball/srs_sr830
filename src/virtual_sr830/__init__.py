@@ -49,4 +49,4 @@ from sr830.settings import (
     LiaStatusFlag as LiaStatusFlag,
 )
 
-from sr830.exceptions import InstrumentError as InstrumentError
+from sr830 import InstrumentError as InstrumentError

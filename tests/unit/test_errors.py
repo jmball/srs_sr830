@@ -14,21 +14,17 @@ def timeout_error():
     return pyvisa.errors.VisaIOError(StatusCode.error_timeout)
 
 
-def test_write_checks_direct_registers_and_reports_context(
+def test_write_checks_direct_registers_and_decodes_faults(
     mock_instrument, resource, query_replies
 ):
     # No *STB? or enable mask participates in fault detection.
     query_replies.update({"*ESR?": "48", "ERRS?": "128"})
     with pytest.raises(InstrumentError) as caught:
         mock_instrument.reference_frequency = 123
-    failure = caught.value
     assert VirtualInstrumentError is InstrumentError
-    assert failure.operation == "FREQ 123"
-    assert failure.registers == {"*ESR?": 48, "ERRS?": 128}
-    assert failure.errors == (
-        "Command cannot execute/parameter out of range",
-        "Received illegal command",
-        "Internal math error",
+    assert str(caught.value) == (
+        "Command cannot execute/parameter out of range; "
+        "Received illegal command; Internal math error"
     )
     assert [call.args[0] for call in resource.method_calls] == [
         "FREQ 123",
@@ -110,7 +106,7 @@ def test_initialization_fault_closes_resource_before_publishing_connection(
     connect, driver, resource, query_replies
 ):
     query_replies["*ESR?"] = "32"
-    with pytest.raises(InstrumentError, match="connect"):
+    with pytest.raises(InstrumentError, match="illegal command"):
         connect()
     assert driver._instr is None
     resource.close.assert_called_once()
@@ -195,7 +191,6 @@ def test_confirmed_fault_survives_later_diagnostic_failure(mock_instrument, reso
     resource.query.side_effect = ["32", timeout_error()]
     with pytest.raises(InstrumentError, match="illegal command") as caught:
         mock_instrument.check_errors()
-    assert caught.value.registers == {"*ESR?": 32}
     assert isinstance(caught.value.__cause__, pyvisa.errors.VisaIOError)
     with pytest.raises(RuntimeError, match="reconnect"):
         mock_instrument.idn

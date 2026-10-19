@@ -90,7 +90,7 @@ class VirtualSR830(SR830):
         self._io_desynchronized = False
         self._connected = True
         try:
-            self.check_errors(operation="connect()")
+            self.check_errors()
         except BaseException:
             self._connected = False
             raise
