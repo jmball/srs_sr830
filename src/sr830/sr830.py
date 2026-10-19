@@ -93,6 +93,19 @@ class SR830:
         self._fast_running = False
         self._io_desynchronized = False
 
+    def __enter__(self) -> SR830:
+        """Enter the runtime context related to this object."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Exit the runtime context related to this object."""
+        self.disconnect()
+
     def _raw_write(self, command: str) -> None:
         """Send a command to the connected instrument."""
         if self._instr is None:
@@ -161,19 +174,6 @@ class SR830:
                     resource.end_input = serial_end
             finally:
                 resource.read_termination = termination
-
-    def __enter__(self) -> SR830:
-        """Enter the runtime context related to this object."""
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        """Exit the runtime context related to this object."""
-        self.disconnect()
 
     def connect(
         self,
