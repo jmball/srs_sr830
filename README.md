@@ -11,7 +11,7 @@ uv sync --locked
 ```
 
 uv creates `.venv`, installs the project in editable mode, and installs the
-`dev` dependency group (pytest, coverage, and mypy). Run commands with `uv run`;
+`dev` dependency group (pytest, coverage, ty, and Ruff). Run commands with `uv run`;
 activating the environment is optional. Commit `uv.lock` when dependencies change.
 
 For a runtime-only environment, use `uv sync --locked --no-dev`. Native serial
@@ -105,8 +105,8 @@ hardware:
 uv run --locked python examples/configure_and_measure_virtual.py
 ```
 
-It supplies simulated 3 mV X and 4 mV Y RMS components. Waiting for settling
-advances simulated time without sleeping.
+It supplies a simulated 5 mV RMS input at 30 degrees. Settling and acquisition
+follow elapsed time, with the same waits as the hardware driver.
 
 [The hardware example](examples/configure_and_measure.py) requires an explicit
 VISA resource. It changes reference, input, filter, front-panel, and acquisition
@@ -140,7 +140,11 @@ rejected even when its number is in range.
 
 ```python
 from sr830 import (
-    LowPassFilterSlope, SampleRate, Sensitivity, TimeConstant, SR830,
+    LowPassFilterSlope,
+    SampleRate,
+    Sensitivity,
+    TimeConstant,
+    SR830,
 )
 
 with SR830() as instrument:
@@ -187,15 +191,24 @@ the channel passed to `set_display()`.
 
 ```python
 from sr830 import (
-    Channel, Channel1Display, Channel1Ratio, MeasurementParameter,
-    OutputExpansion, OutputParameter,
+    Channel,
+    Channel1Display,
+    Channel1Ratio,
+    MeasurementParameter,
+    OutputExpansion,
+    OutputParameter,
 )
 
 instrument.set_display(Channel.CH1, Channel1Display.R, Channel1Ratio.NONE)
 instrument.set_output_offset_expand(OutputParameter.R, 0.0, OutputExpansion.x10)
-values = tuple(instrument.measure_multiple([
-    MeasurementParameter.X, MeasurementParameter.Y,
-]))
+values = tuple(
+    instrument.measure_multiple(
+        [
+            MeasurementParameter.X,
+            MeasurementParameter.Y,
+        ]
+    )
+)
 ```
 
 Register selectors retain their string values through `StatusRegister`. Each
@@ -208,13 +221,16 @@ register names remain accepted.
 from sr830 import ErrorBit, ErrorFlag, StatusRegister, SwitchState
 
 instrument.set_enable_register(
-    StatusRegister.ERROR, ErrorFlag.RAM_ERROR | ErrorFlag.ROM_ERROR,
+    StatusRegister.ERROR,
+    ErrorFlag.RAM_ERROR | ErrorFlag.ROM_ERROR,
 )
 instrument.set_enable_register(
-    StatusRegister.ERROR, SwitchState.ON,
-    decimal=False, bit=ErrorBit.RAM_ERROR,
+    StatusRegister.ERROR,
+    SwitchState.ON,
+    decimal=False,
+    bit=ErrorBit.RAM_ERROR,
 )
-errors = ErrorFlag(instrument.get_status_byte(StatusRegister.ERROR))
+errors = instrument.error_status  # ERRS?; returns ErrorFlag
 ```
 
 The four position/mask pairs are `StandardEventBit`/`StandardEventFlag`,
@@ -222,6 +238,20 @@ The four position/mask pairs are `StandardEventBit`/`StandardEventFlag`,
 `LiaStatusBit`/`LiaStatusFlag`. Both drivers implement enable registers, event
 registers, and serial-poll status. Reading event registers clears the queried
 events; `serial_poll()` performs native VISA polling and acknowledges SRQ.
+
+Read-only status properties are available on both drivers:
+
+```python
+events = instrument.standard_event_status  # *ESR? -> StandardEventFlag
+errors = instrument.error_status  # ERRS? -> ErrorFlag
+lia_status = instrument.lia_status  # LIAS? -> LiaStatusFlag
+```
+
+Each property access performs I/O and returns the raw flag mask without raising
+for reported instrument faults or querying other registers. They read and clear the selected register,
+independently of enable masks. Reading them consumes events the automatic error
+checks would otherwise see. `check_errors()` and `check_measurement_status()`
+use these same queries to interpret faults and raise `InstrumentError`.
 
 The enums are the public representation of discrete settings; legacy value
 and description tables have been removed. Member meanings, physical units,
@@ -241,12 +271,26 @@ scan is paused, so this is an explicit policy rather than an inferred restoratio
 One-shot scans are not automatically paused or restarted.
 
 Normal checked writes already wait for command completion.
-`wait_until_ready(timeout=10)` can wait for independently initiated operations, using native VISA
-status polling where supported and a queued query otherwise. `wait_for_settling(
-timeout=60, time_constants=10)` additionally waits the requested multiple of the
-selected low-pass time constant. Both use seconds and raise `TimeoutError` when
-the budget is insufficient. Settling is an estimate, not a stability measurement
-or a model of external reference locking and synchronous-filter transients.
+`wait_until_ready(timeout=10)` can wait for independently initiated operations,
+using native VISA status polling where supported and a queued query otherwise.
+
+`wait_for_settling()` queries the actual filter slope and time constant, then
+waits the manual's approximate time to reach 99% of the final value:
+
+| Slope | Time constants |
+|---|---:|
+| 6 dB/oct | 5 |
+| 12 dB/oct | 7 |
+| 18 dB/oct | 9 |
+| 24 dB/oct | 10 |
+
+These values come from the SR830 manual's "Intrinsic (Random) Noise Sources",
+printed page 3-21 ([PDF page 49](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf#page=49)).
+Use `wait_for_settling(time_constants=20)` to override the multiplier. There is
+no overall settling timeout; configuration queries retain normal VISA I/O
+timeouts and error handling. This estimates low-pass settling rather than
+measuring stability. Synchronous-filter transients, external reference locking,
+and noise-estimate averaging are excluded.
 
 GPIB FAST transfers have a dedicated reader:
 
@@ -274,40 +318,79 @@ or disabling FAST also clears pending stream bytes.
 ## Simulation
 
 `VirtualSR830` inherits the hardware driver's settings, validation, and command
-methods. Its in-memory protocol model provides coherent X/Y/R/phase readings,
+methods. It interprets the inherited driver's command strings directly using its
+own state, providing coherent X/Y/R/phase readings,
 cascaded low-pass settling, offsets, display ratios, independent auxiliary inputs
 and outputs, auto functions, saved setups, status registers, triggered and timed
 acquisition, bounded circular buffers, all three trace encodings, and FAST counts.
 Reset preserves the response interface and status registers, as on the instrument.
 
 ```python
-from virtual_sr830 import VirtualSR830
-from sr830 import MeasurementParameter, SampleRate, TimeConstant
+import time
 
-with VirtualSR830(clock=lambda: 0.0) as instrument:
-    instrument.connect("GPIB0::8::INSTR")  # No VISA resource is opened.
-    instrument.time_constant = TimeConstant.ms_100
-    instrument.set_signal(0.003, 0.004)  # Demodulated RMS X/Y in V.
-    instrument.wait_for_settling()      # Advances simulation time, no sleep.
-    print(tuple(instrument.measure_multiple([
-        MeasurementParameter.X, MeasurementParameter.Y, MeasurementParameter.R,
-    ])))
-    instrument.sample_rate = SampleRate.Hz_16
+from sr830 import settings
+from virtual_sr830 import VirtualSR830
+
+with VirtualSR830(amplitude=0.005, phase=30.0) as instrument:
+    instrument.connect()  # No resource name or manager is needed.
+    instrument.time_constant = settings.TimeConstant.ms_100
+    instrument.wait_for_settling()
+    print(instrument.measure(settings.MeasurementParameter.R))
+
+    instrument.sample_rate = settings.SampleRate.Hz_16
     instrument.start()
-    instrument.advance_time(0.25)
+    time.sleep(0.25)
+    instrument.pause()
     trace = instrument.get_ascii_buffer_data(1, 0, 4)
 ```
 
-The default clock follows monotonic wall time. An injected clock plus
-`advance_time(seconds)` makes experiments deterministic and fast. Constructor
-`signal=lambda seconds: complex(x, y)` provides a time-dependent input, evaluated
-at simulation updates and acquisition sample times. Constant-input changes have
-an analytic cascaded-filter step response; varying callbacks use a stepwise input
-approximation, so advance in small increments for rapid waveforms. `set_signal()`
-replaces the callback; `settle=True` initializes the filter immediately.
+Constructor arguments describe external conditions, independently of instrument
+configuration. `external_frequency` defaults to 1000.0 Hz, `external_locked` to
+True, and `aux_inputs` to four zero-volt inputs in channel order. For example:
 
-Signals are demodulated RMS amplitudes in V for voltage mode and A for current
-mode, before phase, offset, and expansion. `set_aux_input(channel, voltage)` and
+```python
+instrument = VirtualSR830(
+    amplitude=0.005,
+    phase=30.0,
+    external_frequency=137.0,
+    external_locked=True,
+    aux_inputs=(0.1, 0.2, 0.3, 0.4),
+)
+```
+
+The reference source remains an ordinary instrument setting: select external
+mode to use the supplied external frequency. Later changes use
+`set_external_reference()` and `set_aux_input()`. Constructor inputs use the same
+validation and survive resets and reconnects; auxiliary outputs are independent.
+
+Virtual `connect()` defaults to GPIB. Select
+`output_interface=settings.OutputInterface.RS232` explicitly to exercise serial
+behavior; that choice controls framing validation and FAST availability.
+Resource names and resource managers passed by shared hardware/application code
+are accepted but ignored: the simulator never parses a VISA name, looks up a
+manager, or opens a resource. The hardware driver's connection behavior is
+unchanged.
+
+`amplitude` is the nonnegative RMS input amplitude (default 0.001), and `phase` is
+its input phase in degrees (default zero). Both are read/write properties that
+can also be supplied to the constructor. Input X/Y targets are calculated as
+`amplitude * cos(phase)` and `amplitude * sin(phase)`, with phase converted to
+radians.
+The instrument's `reference_phase_shift` rotates these components independently.
+Changing either input property retains the filter state and settles through the
+selected time constant and slope. Constructor inputs start at steady state.
+
+The simulator uses monotonic elapsed time internally. Acquisition samples and
+cascaded low-pass responses are calculated when the driver is accessed; no
+background thread or caller-driven time stepping is needed. The hardware
+`wait_until_ready()` and `wait_for_settling()` implementations are inherited.
+FAST reads wait for samples and enforce their timeout budgets. Auto-phase,
+auto-gain, auto-reserve, and auto-offset complete immediately. There is no public
+clock, time-advance method, or signal callback. Tests patch internal time sources
+to exercise the same calculations without waiting in real time.
+
+Signal amplitudes are in V for voltage mode and A for current mode, before
+offset and expansion. Changing input configuration does not rescale the input. `set_aux_input(channel, voltage)` and
 `set_external_reference(frequency, locked=True)` supply external conditions;
 `inject_status(register, mask)` supplies faults for application tests. Configuration
 survives disconnect/reconnect, while I/O requires a connection.
@@ -315,8 +398,8 @@ survives disconnect/reconnect, while I/O requires a connection.
 This models an ideal demodulated signal, not the analog front end: notch filters,
 AC coupling, synchronous rejection, input noise, calibration, overload distortion,
 and reserve-dependent interference are not electrically simulated. Noise displays
-read zero for the ideal input, and auto reserve selects low noise. The signal
-callback can supply demodulated interference or noise to test application behavior.
+read zero for the ideal input, and auto reserve selects low noise. Applications
+can change amplitude and phase properties to model input changes.
 Simulation does not validate VISA transport, adapter firmware, or physical accuracy.
 
 ## Logging and warnings
@@ -416,14 +499,25 @@ uv run --locked pytest -m unit
 uv run --locked pytest --cov --cov-report=term-missing
 ```
 
-Type-check and build distributions with:
+Use ty for type checking and Ruff for linting and formatting:
 
 ```sh
-uv run --locked mypy --python-version 3.10 --strict --follow-imports=silent \
-    src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py \
-    src/virtual_sr830/virtual_sr830.py src/virtual_sr830/_simulation.py
-uv build
+uv run --locked ty check
+uv run --locked ruff check .
+uv run --locked ruff format --check .
 ```
+
+Both tools are configured in `pyproject.toml` and infer the minimum supported
+Python version from `requires-python`. ty checks source, examples, and tests.
+Ruff checks common errors and import ordering, and formats Python code and
+Python examples in Markdown. To apply formatting or automatic lint fixes:
+
+```sh
+uv run --locked ruff check --fix .
+uv run --locked ruff format .
+```
+
+Build distributions with `uv build`.
 
 Use `uv add <package>` for runtime dependencies, `uv add --dev <package>` for
 development tools, and `uv lock --upgrade-package <package>` for a targeted

@@ -132,7 +132,8 @@ def main() -> None:
             | settings.LiaStatusFlag.REFERENCE_UNLOCK,
         )
 
-        instrument.wait_for_settling(timeout=5.0, time_constants=10.0)
+        # Use the manual's slope-dependent estimate for 99% low-pass settling.
+        instrument.wait_for_settling()
         x, y, magnitude, phase = instrument.measure_multiple(
             [
                 settings.MeasurementParameter.X,

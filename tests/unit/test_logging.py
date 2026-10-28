@@ -1,10 +1,11 @@
 """Library logging policy checks without hardware."""
 
-import pytest
 import inspect
 import subprocess
 import sys
 import warnings
+
+import pytest
 
 
 def test_import_preserves_application_logging_and_warning_policy():
@@ -68,7 +69,9 @@ def test_serial_binary_warnings_identify_the_caller(driver, resource, query_repl
         query_replies.update({"SEND?": "0", "SPTS?": "1", "OUTX?": "0"})
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
-            expected_line = inspect.currentframe().f_lineno + 1
+            frame = inspect.currentframe()
+            assert frame is not None
+            expected_line = frame.f_lineno + 1
             reader(1, 0, 1)
         assert len(captured) == 1
         assert captured[0].category is UserWarning

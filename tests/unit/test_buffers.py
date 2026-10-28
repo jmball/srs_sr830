@@ -2,9 +2,8 @@
 
 import struct
 
-from pyvisa.constants import SerialTermination
-
 import pytest
+from pyvisa.constants import SerialTermination
 
 from sr830 import Channel
 

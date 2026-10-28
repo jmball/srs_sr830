@@ -1,9 +1,11 @@
 """Hardware-free connection lifecycle tests. Run with pytest."""
 
-import pytest
 from unittest.mock import Mock, PropertyMock, patch
+
+import pytest
 import pyvisa
-from pyvisa.constants import InterfaceType
+from pyvisa.constants import InterfaceType, StatusCode
+
 from virtual_sr830 import VirtualSR830
 
 
@@ -195,6 +197,9 @@ def test_io_helpers_reject_disconnected_instances(connect, driver):
     operations = (
         lambda: driver._write("*RST"),
         lambda: driver._query("*IDN?"),
+        lambda: driver.standard_event_status,
+        lambda: driver.error_status,
+        lambda: driver.lia_status,
         lambda: driver._query_ascii_values("TRCA? 1,0,1"),
         lambda: driver._read_buffer_bytes("TRCB? 1,0,1", 4),
         lambda: setattr(driver, "output_interface", 1),
@@ -230,7 +235,7 @@ def test_io_helpers_delegate_and_preserve_responses(
 
 def test_io_helpers_preserve_visa_errors(connect, driver, resource):
     connect()
-    failure = pyvisa.errors.VisaIOError(pyvisa.constants.StatusCode.error_timeout)
+    failure = pyvisa.errors.VisaIOError(StatusCode.error_timeout)
     operations = (
         (resource.write, lambda: driver._write("*RST")),
         (resource.query, lambda: driver._query("*IDN?")),
@@ -249,29 +254,37 @@ def test_io_helpers_preserve_visa_errors(connect, driver, resource):
         connect()
 
 
-def test_virtual_connection_matches_api_and_preserves_settings():
-    for name, interface in (("ASRL1::INSTR", 0), ("GPIB0::14::INSTR", 1)):
+def test_virtual_connection_preserves_settings_and_lifecycle():
+    for interface in (0, 1):
         virtual = VirtualSR830()
-        virtual.connect(name)
+        virtual.connect(output_interface=interface)
         virtual.reference_frequency = 1234.0
         virtual.disconnect()
-        virtual.connect(name)
+        virtual.connect(output_interface=interface)
         assert virtual.output_interface == interface
         assert virtual.reference_frequency == 1234.0
         with pytest.raises(RuntimeError):
-            virtual.connect(name)
+            virtual.connect()
         virtual.disconnect()
         virtual.disconnect()
-        virtual.connect(name)
+        virtual.connect()
         assert virtual.local_mode == 0
+        assert virtual.output_interface == 1
         virtual.disconnect()
+
+
+def test_virtual_interface_defaults_to_gpib_and_framing_is_explicit():
+    with VirtualSR830() as virtual:
+        virtual.connect()
+        assert virtual.output_interface == 1
     virtual = VirtualSR830()
-    with pytest.raises(ValueError):
-        virtual.connect("TCPIP0::example.invalid::1234::SOCKET")
-    virtual.connect("TCPIP0::example.invalid::1234::SOCKET", output_interface=1)
+    with pytest.raises(ValueError, match="read_termination"):
+        virtual.connect(read_termination="\r")
+    virtual.connect(output_interface=0, read_termination="\r")
+    assert virtual.output_interface == 0
     virtual.disconnect()
-    with pytest.raises(ValueError):
-        virtual.connect("ASRL1::INSTR", read_termination="\n")
+    with pytest.raises(ValueError, match="data_bits"):
+        virtual.connect(output_interface=0, data_bits=7)
 
 
 def test_tcpip_adapters_require_command_terminator(connect, manager):

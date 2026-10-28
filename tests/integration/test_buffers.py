@@ -1,6 +1,7 @@
 """Buffer acquisition/readout shared by hardware and the stateful simulator."""
 
 import math
+
 import pytest
 
 from sr830 import Channel

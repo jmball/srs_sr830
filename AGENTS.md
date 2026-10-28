@@ -9,9 +9,9 @@ lock-in amplifier over PyVISA, plus a virtual instrument for development.
   settings, measurements, buffer transfers, status registers, InstrumentError,
   and fault decoding.
 - `src/virtual_sr830/virtual_sr830.py`: simulator inheriting the hardware public
-  interface, with connection/I/O adapters and simulation controls.
-- `src/virtual_sr830/_simulation.py`: stateful demodulated-signal model, filters,
-  acquisition, setups, protocol responses, and registers; opens no VISA resource.
+  interface. Owns input and filter state, acquisition, setups, status registers,
+  command interpretation, and simulated I/O; opens no VISA resource. The shared
+  output_interface getter is inherited; only its VISA-specific setter is replaced.
 - Each package's `__init__.py` exports its implementation and obtains a version
   through `importlib.metadata` for the `srs_sr830` distribution, falling back to
   `0.0.0`.
@@ -74,14 +74,18 @@ The hardware class is `sr830.SR830`; the virtual class is
   checked `_write()`, `_query()`, `_query_ascii_values()`, and
   `_read_buffer_bytes()` helpers, backed by raw transport helpers. Normal I/O
   checks command/device faults through *ESR?/ERRS?; measurements additionally
-  check LIAS?. Explicit status reads bypass automatic checks. FAST checks wait
+  check LIAS?. Read-only standard_event_status, error_status, and
+  lia_status properties perform I/O, return flag masks and clear only their own register;
+  explicit status reads bypass automatic checks. FAST checks wait
   until pending stream bytes have been cleared. Inline guards raise RuntimeError
   when disconnected, using a shared message constant. Direct resource access is reserved for
   connection lifecycle and framing configuration. Setters validate values before
   writing commands. Preserve command spelling, channel numbering, and
   interface-specific binary transfer behavior.
 - The SR830 programming manual is linked in both implementation module
-  docstrings. Consult it when changing protocol behavior.
+  docstrings. Use the cached `/tmp/SR830m.pdf` and searchable `/tmp/SR830m.txt`
+  for future lookups; if absent, download the official manual to that PDF path
+  and regenerate the text with pdftotext. Consult it when changing protocol behavior.
 - Python >=3.10 is required. Preserve this minimum unless the task changes
   compatibility.
 - Keep logging configuration in applications. The driver uses a module logger
@@ -89,10 +93,15 @@ The hardware class is `sr830.SR830`; the virtual class is
   root logger, capture warnings globally, or print. Instrument faults raise
   InstrumentError silently; check_errors() replaces the removed errors property.
   Serial-transfer warnings use `stacklevel=2`.
-- No CI, formatter, or linter is configured. Both packages ship `py.typed`.
-  Driver annotations can be checked with `uv run --locked mypy --strict --follow-imports=silent
-  src/sr830/settings.py src/sr830/sr830.py src/sr830/_connection.py
-  src/virtual_sr830/virtual_sr830.py src/virtual_sr830/_simulation.py` (included in the dev group).
+- Always use ty for type checking and Ruff for linting and formatting; both are
+  installed through the locked dev dependency group. Configuration belongs in
+  pyproject.toml. Run `uv run --locked ty check`, `uv run --locked ruff check .`,
+  and `uv run --locked ruff format --check .` before finishing Python changes.
+  Apply formatting with `uv run --locked ruff format .`; use
+  `uv run --locked ruff check --fix .` for reviewed lint fixes. Both tools infer
+  the minimum Python version from project.requires-python. ty covers source,
+  examples, and tests; fix diagnostics rather than adding blanket suppressions.
+  Both packages ship `py.typed`. No CI is configured.
 
 ## Setup and validation
 
@@ -126,12 +135,12 @@ Favor representative, independent wire contracts and behavioral tests over exhau
 setting/member/type products. Test shared validation once thoroughly and check its
 use at other entry points; do not duplicate inherited validation on the simulator.
 Expected wire codes should be literal, manual-backed values rather than derived
-from the enum under test. Use mypy for annotations; coverage is diagnostic, not a target.
+from the enum under test. Use ty for annotations; coverage is diagnostic, not a target.
 
 Use `uv add --dev` for development tools, `uv add` for runtime dependencies,
 and `uv lock --upgrade-package` for targeted updates. Commit pyproject.toml and
 uv.lock together. Use `uv build` for distributions. The default dev group includes
-pytest, pytest-cov, and mypy. For serial hardware, keep `--extra serial` on both
+pytest, pytest-cov, ty, and Ruff. For serial hardware, keep `--extra serial` on both
 `uv sync` and `uv run` commands so synchronization retains pyserial.
 
 Integration fixtures create fresh connections and restore changed properties even
@@ -169,9 +178,24 @@ the hardware driver's context manager calls `disconnect()` on exit.
 - Query-timeout recovery attempts device clear and diagnostics only on native
   GPIB; preserve the original VISA timeout if no fault is confirmed. Unrecovered
   timeouts and short binary responses require reconnecting before further I/O.
-- Completion/settling helpers have finite timeout budgets. Settling estimates a
-  multiple of the low-pass time constant, not physical measurement stability.
-- Simulation tests use an injected clock and advance_time(), not real sleeps.
+- Completion waits and FAST reads have finite timeout budgets. Settling waits
+  have no overall timeout: default to the manual's 99% low-pass estimates of
+  5/7/9/10 time constants for 6/12/18/24 dB/oct (manual 3-21), with an optional
+  finite positive time_constants override. Configuration queries keep normal
+  VISA timeouts. Settling does not measure physical stability or include
+  synchronous-filter transients, reference lock, or noise-estimate averaging.
+- Virtual connect() needs no resource name and defaults to GPIB. Supplied
+  resource names and managers are ignored without parsing or lookup; choose
+  output_interface explicitly to simulate serial framing or FAST restrictions.
+- VirtualSR830 exposes finite nonnegative RMS amplitude and finite input phase
+  (degrees) as constructor arguments and read/write properties. Constructor
+  external_frequency/external_locked default to 1000 Hz/True; aux_inputs defaults
+  to four zero-volt inputs. Reuse set_external_reference()/set_aux_input() validation
+  for constructor conditions, with per-instance copies. Settling and
+  acquisition use elapsed monotonic time internally; inherit hardware wait
+  helpers. Auto functions are instantaneous. There is no public clock, time
+  stepping, set_signal(), or callback API. Simulation tests patch internal time
+  sources with simulation_clock instead of adding simulation-only caller steps.
   Keep physical units, phase, display offsets/ratios, buffer cadence, register
   latching/clear-on-read, and setup copies consistent. Expand changes ordinary
   display resolution rather than its amplitude; FAST counts and ratios include it.

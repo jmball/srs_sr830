@@ -1,6 +1,7 @@
 """Basic instrument identity and finite measurements without a calibrated signal."""
 
 import math
+
 import pytest
 
 from sr830 import AuxiliaryChannel, Channel, MeasurementParameter

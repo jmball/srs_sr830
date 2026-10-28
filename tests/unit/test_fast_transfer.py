@@ -2,8 +2,9 @@
 
 import struct
 
-import pyvisa
 import pytest
+import pyvisa
+from pyvisa.constants import StatusCode
 
 from sr830 import DataTransferMode
 
@@ -36,7 +37,7 @@ def test_fast_transfer_decodes_signed_pairs_without_query(
     "failure",
     [
         OSError("failed"),
-        pyvisa.errors.VisaIOError(pyvisa.constants.StatusCode.error_timeout),
+        pyvisa.errors.VisaIOError(StatusCode.error_timeout),
     ],
 )
 def test_failed_fast_read_stops_and_clears_stream(mock_instrument, resource, failure):

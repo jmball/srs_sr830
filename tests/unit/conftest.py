@@ -3,12 +3,13 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
 import pyvisa
 from pyvisa.constants import InterfaceType
 from pyvisa.resources import GPIBInstrument, SerialInstrument
-import pytest
 
 from sr830 import SR830
+from tests.support import ManualClock
 from virtual_sr830 import VirtualSR830
 
 
@@ -59,10 +60,23 @@ def mock_instrument(driver, resource):
 
 
 @pytest.fixture
-def simulation():
+def simulation_clock(monkeypatch):
+    """Replace internal time sources, keeping production's public API unchanged."""
+    clock = ManualClock()
+    timer = SimpleNamespace(monotonic=clock, sleep=clock.advance)
+    for module in (
+        "sr830.sr830",
+        "virtual_sr830.virtual_sr830",
+    ):
+        monkeypatch.setattr(f"{module}.time", timer)
+    return clock
+
+
+@pytest.fixture
+def simulation(simulation_clock):
     """Fresh, connected simulator with deterministic time and guaranteed cleanup."""
-    with VirtualSR830(clock=lambda: 0.0) as instrument:
-        instrument.connect("GPIB0::8::INSTR")
+    with VirtualSR830() as instrument:
+        instrument.connect()
         yield instrument
 
 

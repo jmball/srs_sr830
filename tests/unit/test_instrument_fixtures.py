@@ -7,7 +7,6 @@ import pytest
 from pyvisa.constants import Parity, StopBits
 
 from sr830 import SR830
-from virtual_sr830 import VirtualSR830
 from tests.support import (
     InstrumentOptions,
     open_instrument,
@@ -15,6 +14,7 @@ from tests.support import (
     positive_int,
     preserve_settings,
 )
+from virtual_sr830 import VirtualSR830
 
 
 def test_default_backend_never_constructs_a_visa_manager():

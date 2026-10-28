@@ -6,23 +6,24 @@ https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+import logging
+import math
+import struct
+import time
+import warnings
+from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager, suppress
 from types import TracebackType
 from typing import Any
 
-import logging
-import struct
-import math
-import time
-import warnings
-
 import pyvisa
-from pyvisa.constants import SerialTermination
+from pyvisa.constants import InterfaceType, SerialTermination, StatusCode
 from pyvisa.resources import MessageBasedResource, SerialInstrument
 
 from ._connection import connection_kwargs, resolve_output_interface
 from .settings import (
+    _ENABLE_REGISTER_COMMANDS,
+    _STATUS_REGISTER_COMMANDS,
     AuxiliaryChannel,
     Channel,
     Channel1Display,
@@ -61,8 +62,6 @@ from .settings import (
     SynchronousFilter,
     TimeConstant,
     TriggerStartMode,
-    _ENABLE_REGISTER_COMMANDS,
-    _STATUS_REGISTER_COMMANDS,
     _require_integer,
     _time_constant_seconds,
     _validate_enum,
@@ -70,38 +69,37 @@ from .settings import (
     _validate_register_value,
 )
 
-
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 _NOT_CONNECTED_MESSAGE = "Instrument is not connected."
 
 
-_FAULTS = {
-    "*ESR?": (
-        (StandardEventFlag.INPUT_QUEUE_OVERFLOW, "Input queue overflow"),
-        (StandardEventFlag.OUTPUT_QUEUE_OVERFLOW, "Output queue overflow"),
-        (
-            StandardEventFlag.EXECUTION_ERROR,
-            "Command cannot execute/parameter out of range",
-        ),
-        (StandardEventFlag.COMMAND_ERROR, "Received illegal command"),
+_STANDARD_EVENT_ERRORS = (
+    (StandardEventFlag.INPUT_QUEUE_OVERFLOW, "Input queue overflow"),
+    (StandardEventFlag.OUTPUT_QUEUE_OVERFLOW, "Output queue overflow"),
+    (
+        StandardEventFlag.EXECUTION_ERROR,
+        "Command cannot execute/parameter out of range",
     ),
-    "ERRS?": (
-        (ErrorFlag.BACKUP_ERROR, "Battery backup has failed"),
-        (ErrorFlag.RAM_ERROR, "RAM memory test found error"),
-        (ErrorFlag.ROM_ERROR, "ROM memory test found error"),
-        (ErrorFlag.GPIB_ERROR, "GPIB fast data transfer mode aborted"),
-        (ErrorFlag.DSP_ERROR, "DSP test found error"),
-        (ErrorFlag.MATH_ERROR, "Internal math error"),
-    ),
-    "LIAS?": (
-        (LiaStatusFlag.INPUT_OVERLOAD, "Input or amplifier overload"),
-        (LiaStatusFlag.FILTER_OVERLOAD, "Time constant filter overload"),
-        (LiaStatusFlag.OUTPUT_OVERLOAD, "Output overload"),
-        (LiaStatusFlag.REFERENCE_UNLOCK, "Reference unlock detected"),
-    ),
-}
+    (StandardEventFlag.COMMAND_ERROR, "Received illegal command"),
+)
+
+_DEVICE_ERRORS = (
+    (ErrorFlag.BACKUP_ERROR, "Battery backup has failed"),
+    (ErrorFlag.RAM_ERROR, "RAM memory test found error"),
+    (ErrorFlag.ROM_ERROR, "ROM memory test found error"),
+    (ErrorFlag.GPIB_ERROR, "GPIB fast data transfer mode aborted"),
+    (ErrorFlag.DSP_ERROR, "DSP test found error"),
+    (ErrorFlag.MATH_ERROR, "Internal math error"),
+)
+
+_MEASUREMENT_ERRORS = (
+    (LiaStatusFlag.INPUT_OVERLOAD, "Input or amplifier overload"),
+    (LiaStatusFlag.FILTER_OVERLOAD, "Time constant filter overload"),
+    (LiaStatusFlag.OUTPUT_OVERLOAD, "Output overload"),
+    (LiaStatusFlag.REFERENCE_UNLOCK, "Reference unlock detected"),
+)
 
 
 class InstrumentError(RuntimeError):
@@ -144,7 +142,7 @@ class SR830:
         try:
             self._instr.write(command)
         except pyvisa.errors.VisaIOError as exc:
-            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+            if exc.error_code == StatusCode.error_timeout:
                 self._io_desynchronized = True
             raise
 
@@ -158,7 +156,7 @@ class SR830:
         try:
             return self._instr.query(command)
         except pyvisa.errors.VisaIOError as exc:
-            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+            if exc.error_code == StatusCode.error_timeout:
                 self._io_desynchronized = True
             raise
 
@@ -237,7 +235,8 @@ class SR830:
         -----
         The driver owns the opened resource. A second connect raises RuntimeError
         until disconnect is called. Initialization selects the response interface,
-        and enables status registers before checking errors and storing _instr.
+        and enables status registers before attaching the resource for final error
+        checks. Any initialization failure clears _instr and closes the resource.
         Set local_mode explicitly after connecting to select remote mode or local lockout.
         Failures close the resource and leave the instance disconnected; commands
         already sent to the instrument cannot be rolled back. Call reset()
@@ -276,14 +275,15 @@ class SR830:
             resource.write(f"OUTX {interface}")
             for command in _ENABLE_REGISTER_COMMANDS.values():
                 resource.write(f"{command} 255")
-            self._check_registers("*ESR?", "ERRS?", resource=resource)
+            self._instr = resource
+            self._io_desynchronized = False
+            self.check_errors()
         except BaseException:
+            self._instr = None
             # Preserve the initialization error even if close also fails.
             with suppress(Exception):
                 resource.close()
             raise
-        self._instr = resource
-        self._io_desynchronized = False
         logger.debug("SR830 connection initialized: %s", resource_name)
 
     def disconnect(self) -> None:
@@ -323,28 +323,6 @@ class SR830:
                 "Response framing is uncertain after an I/O failure; disconnect and reconnect."
             )
 
-    def _check_registers(
-        self, *commands: str, resource: MessageBasedResource | None = None
-    ) -> None:
-        """Read and decode faults; resource is only used before connect publishes it."""
-        query = self._raw_query if resource is None else resource.query
-        errors: list[str] = []
-        try:
-            for command in commands:
-                value = int(query(command))
-                if not 0 <= value <= 255:
-                    raise OSError(f"Invalid status response to {command}: {value}")
-                errors.extend(
-                    message for flag, message in _FAULTS[command] if value & flag
-                )
-        except Exception as exc:
-            # Preserve a confirmed fault if a later diagnostic query fails.
-            if errors:
-                raise InstrumentError("; ".join(errors)) from exc
-            raise
-        if errors:
-            raise InstrumentError("; ".join(errors))
-
     def check_errors(self) -> None:
         """Raise InstrumentError for command/execution and device faults.
 
@@ -354,7 +332,23 @@ class SR830:
         separately by check_measurement_status(). Automatic checks are deferred
         during FAST; explicit checks raise RuntimeError until streaming stops.
         """
-        self._check_registers("*ESR?", "ERRS?")
+        errors: list[str] = []
+        try:
+            events = self.standard_event_status
+            errors.extend(
+                message for flag, message in _STANDARD_EVENT_ERRORS if events & flag
+            )
+            device_status = self.error_status
+            errors.extend(
+                message for flag, message in _DEVICE_ERRORS if device_status & flag
+            )
+        except Exception as exc:
+            # Preserve a confirmed fault if the second register query fails.
+            if errors:
+                raise InstrumentError("; ".join(errors)) from exc
+            raise
+        if errors:
+            raise InstrumentError("; ".join(errors))
 
     def check_measurement_status(self) -> None:
         """Raise InstrumentError for latched overload or reference-unlock faults.
@@ -363,7 +357,10 @@ class SR830:
         Measurement readers call this automatically. Configuration writes leave
         this register alone, allowing callers to fix an overload or unlock.
         """
-        self._check_registers("LIAS?")
+        status = self.lia_status
+        errors = [message for flag, message in _MEASUREMENT_ERRORS if status & flag]
+        if errors:
+            raise InstrumentError("; ".join(errors))
 
     def _write(self, command: str) -> None:
         self._raw_write(command)
@@ -389,7 +386,7 @@ class SR830:
         """Discard pending output only on native GPIB, where device clear is defined."""
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED_MESSAGE)
-        if self._instr.interface_type != pyvisa.constants.InterfaceType.gpib:
+        if self._instr.interface_type != InterfaceType.gpib:
             return False
         self._instr.clear()
         return True
@@ -398,7 +395,7 @@ class SR830:
         try:
             result = self._raw_query(command)
         except pyvisa.errors.VisaIOError as exc:
-            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+            if exc.error_code == StatusCode.error_timeout:
                 self._diagnose_timeout(exc)
             raise
         self.check_errors()
@@ -408,7 +405,7 @@ class SR830:
         try:
             result = self._raw_query_ascii_values(command)
         except pyvisa.errors.VisaIOError as exc:
-            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+            if exc.error_code == StatusCode.error_timeout:
                 self._diagnose_timeout(exc)
             raise
         self.check_errors()
@@ -418,7 +415,7 @@ class SR830:
         try:
             result = self._raw_read_buffer_bytes(command, size)
         except pyvisa.errors.VisaIOError as exc:
-            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+            if exc.error_code == StatusCode.error_timeout:
                 self._diagnose_timeout(exc)
             raise
         except OSError:
@@ -1906,7 +1903,7 @@ class SR830:
     @contextmanager
     def _buffer_read(
         self, channel: Channel | int, start_bin: int, bins: int, resume: bool
-    ) -> Iterator[None]:
+    ) -> Generator[None, None, None]:
         _validate_enum(channel, Channel)
         _require_integer(start_bin, "start_bin")
         _require_integer(bins, "bins")
@@ -2303,7 +2300,49 @@ class SR830:
         command = _STATUS_REGISTER_COMMANDS[status_byte]
         if bit is not None:
             command += f" {int(bit)}"
-        return int(self._raw_query(command))
+        value = int(self._raw_query(command))
+        if not 0 <= value <= (255 if bit is None else 1):
+            raise OSError("Invalid status register response.")
+        return value
+
+    @property
+    def standard_event_status(self) -> StandardEventFlag:
+        """Read and clear the standard-event register with *ESR?.
+
+        Returns
+        -------
+        StandardEventFlag
+            Latched command/execution/queue errors and ordinary events such as
+            power-on. This raw diagnostic performs no automatic fault checks.
+            Reading it consumes events that check_errors() would otherwise see.
+        """
+        return StandardEventFlag(self.get_status_byte(StatusRegister.STANDARD_EVENT))
+
+    @property
+    def error_status(self) -> ErrorFlag:
+        """Read and clear the device-error register with ERRS?.
+
+        Returns
+        -------
+        ErrorFlag
+            Latched device faults, independent of enable masks. This raw
+            diagnostic performs no automatic fault checks. Reading it consumes
+            faults that check_errors() would otherwise see.
+        """
+        return ErrorFlag(self.get_status_byte(StatusRegister.ERROR))
+
+    @property
+    def lia_status(self) -> LiaStatusFlag:
+        """Read and clear the lock-in status register with LIAS?.
+
+        Returns
+        -------
+        LiaStatusFlag
+            Latched overload/unlock faults and ordinary events such as triggers.
+            This raw diagnostic performs no automatic fault checks. Reading it
+            consumes events that check_measurement_status() would otherwise see.
+        """
+        return LiaStatusFlag(self.get_status_byte(StatusRegister.LIA_STATUS))
 
     @property
     def power_on_status_clear_bit(self) -> int:
@@ -2355,8 +2394,8 @@ class SR830:
             ) from exc
         except pyvisa.errors.VisaIOError as exc:
             if exc.error_code in (
-                pyvisa.constants.StatusCode.error_nonsupported_operation,
-                pyvisa.constants.StatusCode.error_nonimplemented_operation,
+                StatusCode.error_nonsupported_operation,
+                StatusCode.error_nonimplemented_operation,
             ):
                 raise NotImplementedError(
                     "This VISA resource does not support native status polling."
@@ -2364,7 +2403,7 @@ class SR830:
             raise
 
     @contextmanager
-    def _io_timeout(self, seconds: float) -> Iterator[None]:
+    def _io_timeout(self, seconds: float) -> Generator[None, None, None]:
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED_MESSAGE)
         resource = self._instr
@@ -2417,7 +2456,7 @@ class SR830:
                     return
                 time.sleep(min(poll_interval, max(0.0, deadline - time.monotonic())))
         except pyvisa.errors.VisaIOError as exc:
-            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
+            if exc.error_code == StatusCode.error_timeout:
                 raise TimeoutError(
                     "Timed out waiting for SR830 command completion."
                 ) from exc
@@ -2435,39 +2474,47 @@ class SR830:
                 "Timeout and polling interval must be finite and positive."
             )
 
-    def wait_for_settling(
-        self, timeout: float = 60.0, *, time_constants: float = 10.0
-    ) -> None:
-        """Wait for completion and then time_constants times the filter time constant.
-
-        This is a timing estimate, not a measurement-stability test. timeout is
-        a total budget in seconds; insufficient budgets raise TimeoutError.
-        External locking and synchronous-filter transients are not included.
+    def wait_for_settling(self, *, time_constants: float | None = None) -> None:
+        """Wait a calculated low-pass settling delay using the current settings.
 
         Parameters
         ----------
-        timeout : float, optional
-            Positive total budget for completion, querying, and settling, in seconds.
         time_constants : float, optional
-            Positive multiple of the selected low-pass time constant to wait.
+            Finite positive multiplier overriding the manual's slope-dependent
+            recommendation. When omitted, use 5, 7, 9, or 10 time constants for
+            slopes of 6, 12, 18, or 24 dB/oct respectively.
+
+        Notes
+        -----
+        The SR830 manual, "Intrinsic (Random) Noise Sources", printed page 3-21
+        (PDF page 49), gives these approximate waits to reach 99% of the final
+        value. See https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf#page=49.
+        Read the actual time constant because other settings may change it.
+        The configuration queries also wait for preceding commands to complete.
+
+        There is no overall timeout for the calculated sleep. Configuration
+        queries retain their normal VISA I/O timeouts and exception handling.
+        This estimate excludes synchronous-filter transients, external reference
+        locking, and noise-estimate averaging; it does not measure stability.
+
+        Raises
+        ------
+        ValueError
+            The override is nonpositive/nonfinite, or the calculated delay is
+            nonfinite. Instrument and transport faults propagate normally.
         """
-        self._validate_wait(timeout, time_constants)
-        started = time.monotonic()
-        self.wait_until_ready(timeout)
-        remaining = timeout - (time.monotonic() - started)
-        if remaining <= 0:
-            raise TimeoutError("Settling timeout expired.")
-        try:
-            with self._io_timeout(remaining):
-                delay = time_constants * _time_constant_seconds(self.time_constant)
-        except pyvisa.errors.VisaIOError as exc:
-            if exc.error_code == pyvisa.constants.StatusCode.error_timeout:
-                raise TimeoutError(
-                    "Timed out querying the filter time constant."
-                ) from exc
-            raise
-        if delay > timeout - (time.monotonic() - started):
-            raise TimeoutError("Settling requires more time than the supplied timeout.")
+        if time_constants is None:
+            time_constants = {
+                LowPassFilterSlope.dB_6: 5.0,
+                LowPassFilterSlope.dB_12: 7.0,
+                LowPassFilterSlope.dB_18: 9.0,
+                LowPassFilterSlope.dB_24: 10.0,
+            }[LowPassFilterSlope(self.lowpass_filter_slope)]
+        elif not math.isfinite(time_constants) or time_constants <= 0:
+            raise ValueError("time_constants must be finite and positive.")
+        delay = time_constants * _time_constant_seconds(self.time_constant)
+        if not math.isfinite(delay):
+            raise ValueError("Calculated settling delay must be finite.")
         time.sleep(delay)
 
     def read_fast_data(
@@ -2515,7 +2562,7 @@ class SR830:
                 pass
             if (
                 isinstance(exc, pyvisa.errors.VisaIOError)
-                and exc.error_code == pyvisa.constants.StatusCode.error_timeout
+                and exc.error_code == StatusCode.error_timeout
             ):
                 raise TimeoutError("Timed out reading fast-transfer data.") from exc
             raise

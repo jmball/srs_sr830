@@ -19,7 +19,7 @@ simulated acquisition. No hardware is opened without an explicit resource.
 | `unit/test_validation.py` | Invalid public arguments and strict integer protocol fields |
 | `unit/test_buffers.py` | All trace formats, range checks, pause/resume, and framing recovery |
 | `unit/test_fast_transfer.py` | FAST decoding, lifecycle guards, and failure cleanup |
-| `unit/test_waiting.py` | Polling, completion/settling budgets, and VISA error propagation |
+| `unit/test_waiting.py` | Completion polling, manual slope-based settling, and VISA error propagation |
 | `unit/test_simulation.py` | Deterministic filters, signals, setups, registers, acquisition, and streaming |
 | `unit/test_logging.py` | Library logging policy, warnings, and error decoding |
 | `unit/test_instrument_fixtures.py` | Backend selection, option forwarding, failures, and restoration with fake VISA |
@@ -46,8 +46,8 @@ order itself. Keep command and expected-value cases explicit in each test.
 
 Waiting tests use `ManualClock` from `support.py` for monotonic time and sleep.
 Advancing that clock verifies timeout boundaries without real delays. Simulation
-tests share the connected `simulation` fixture, a fixed clock, and the driver's
-`advance_time()` method. Each simulated connection is closed after its test.
+tests share the connected `simulation` fixture and `simulation_clock`, which
+patches internal monotonic/sleep sources without changing the public driver API. Each simulated connection is closed after its test.
 
 ## Choosing tests
 
@@ -61,7 +61,9 @@ Test shared type validation thoroughly through a representative public setting;
 check other entry points with representative invalid inputs. The simulator
 inherits this validation, so do not repeat the same cases against both classes.
 Use simulator tests for measurement/state behavior and integration tests for
-public round trips on either backend. Leave annotation checking to mypy.
+public round trips on either backend. Use `uv run --locked ty check` for annotation checking,
+`uv run --locked ruff check .` for linting, and
+`uv run --locked ruff format --check .` to verify formatting.
 
 Coverage helps locate omissions; it is not a target to preserve by adding tests
 of Python's enum machinery or unreachable private-helper combinations.
@@ -102,7 +104,7 @@ Unit tests keep using fake VISA resources even during a hardware run.
 | --- | --- | --- |
 | `--resource-name` | VISA resource or alias | VirtualSR830 |
 | `--visa-backend` | PyVISA backend or library path | PyVISA default |
-| `--output-interface` | Instrument-side RS232 (0) or GPIB (1) | Infer for native ASRL/GPIB |
+| `--output-interface` | Instrument-side RS232 (0) or GPIB (1) | Hardware: infer for native ASRL/GPIB; virtual: GPIB |
 | `--visa-timeout` | VISA I/O timeout in milliseconds | 5000 |
 | `--baud-rate` | Serial baud rate | VISA default |
 | `--data-bits` | Serial data bits: 8 | Driver 8 |
@@ -125,8 +127,7 @@ local mode. Buffer tests stop acquisition and erase the existing trace buffers;
 previous buffer contents and scan activity cannot be restored.
 
 The virtual driver models demodulated signals, settling, acquisition, registers,
-and saved setups. Unit simulation tests inject a fixed clock and advance time
-without sleeping; integration fixtures acquire actual simulated buffer points.
+and saved setups. Unit simulation tests patch internal time sources to avoid wall-clock delays; integration fixtures acquire actual simulated buffer points.
 Instrument faults raise `InstrumentError`; input validation still raises
 `ValueError`, and unconfirmed transport failures preserve VISA exceptions.
 Hardware measurements require an input/reference configuration without overload

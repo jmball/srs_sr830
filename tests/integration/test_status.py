@@ -1,8 +1,8 @@
 """Register read/write checks shared by hardware and simulation."""
 
 import pytest
-from sr830 import StatusRegister
 
+from sr830 import StatusRegister
 
 
 @pytest.mark.parametrize("register", list(StatusRegister))

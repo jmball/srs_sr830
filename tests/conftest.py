@@ -5,7 +5,6 @@ import time
 import pytest
 
 from sr830 import EndOfBufferMode, ReferenceSource, SampleRate, TriggerStartMode
-from virtual_sr830 import VirtualSR830
 from tests.support import (
     InstrumentOptions,
     open_instrument,
@@ -134,8 +133,6 @@ def recorded_instrument(instrument, pytestconfig):
         instrument.sample_rate = SampleRate.Hz_16
         try:
             instrument.start()
-            if isinstance(instrument, VirtualSR830):
-                instrument.advance_time(0.3)
             deadline = time.monotonic() + pytestconfig.getoption("acquisition_timeout")
             while instrument.buffer_size < 4:
                 if time.monotonic() >= deadline:

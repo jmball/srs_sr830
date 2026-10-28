@@ -1,7 +1,7 @@
 """Configure and measure a virtual SR830 without opening any hardware.
 
-The simulator accepts demodulated RMS voltage components as its input signal.
-Settling advances simulation time instead of sleeping.
+The simulator accepts an RMS input amplitude and a phase in degrees.
+Settling and acquisition follow elapsed time, using the hardware driver interface.
 """
 
 from sr830 import settings
@@ -9,14 +9,18 @@ from virtual_sr830 import VirtualSR830
 
 
 def main() -> None:
-    with VirtualSR830() as instrument:
-        # The resource name selects the simulated interface; no VISA resource opens.
-        instrument.connect(
-            "GPIB0::8::INSTR", output_interface=settings.OutputInterface.GPIB
-        )
-        instrument.set_signal(0.003, 0.004)  # X/Y components in V RMS.
+    with VirtualSR830(
+        amplitude=0.005,
+        phase=30.0,
+        external_frequency=137.0,
+        external_locked=True,
+        aux_inputs=(0.0, 0.0, 0.0, 0.0),
+    ) as instrument:
+        # No resource name or VISA manager is needed; GPIB is the default.
+        instrument.connect()
 
-        # Reference oscillator and sine output.
+        # Reference oscillator and sine output. The external frequency supplied
+        # above is used only when reference_source selects EXTERNAL.
         instrument.reference_source = settings.ReferenceSource.INTERNAL
         instrument.reference_trigger = settings.ReferenceTrigger.ZERO_CROSSING
         instrument.reference_phase_shift = 0.0
@@ -36,6 +40,7 @@ def main() -> None:
         instrument.sync_filter_status = settings.SynchronousFilter.OFF
 
         # Connection and front-panel controls.
+        instrument.output_interface = settings.OutputInterface.GPIB
         instrument.local_mode = settings.LocalMode.REMOTE
         instrument.gpib_override_remote = settings.GpibOverrideRemote.DISABLED
         instrument.key_click_state = settings.SwitchState.OFF
@@ -96,7 +101,8 @@ def main() -> None:
             | settings.LiaStatusFlag.REFERENCE_UNLOCK,
         )
 
-        instrument.wait_for_settling(timeout=5.0, time_constants=10.0)
+        # Use the manual's slope-dependent estimate for 99% low-pass settling.
+        instrument.wait_for_settling()
         x, y, magnitude, phase = instrument.measure_multiple(
             [
                 settings.MeasurementParameter.X,

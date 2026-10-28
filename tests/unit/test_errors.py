@@ -2,9 +2,9 @@
 
 import struct
 
-import pyvisa
 import pytest
-from pyvisa.constants import InterfaceType, StatusCode
+import pyvisa
+from pyvisa.constants import InterfaceType, SerialTermination, StatusCode
 
 from sr830 import InstrumentError, settings
 from virtual_sr830 import InstrumentError as VirtualInstrumentError
@@ -76,7 +76,9 @@ def test_disabled_enable_masks_do_not_hide_faults(simulation):
 
 
 def test_configuration_can_fix_a_measurement_fault(simulation):
-    simulation.set_signal(0.01, settle=True)
+    simulation.amplitude = 0.01
+    simulation.phase = 0
+    simulation.wait_for_settling(time_constants=101)
     simulation.sensitivity = settings.Sensitivity.x1m
     simulation.sensitivity = settings.Sensitivity.x1
     # Configuration left the old overload latch available to the measurement.
@@ -102,7 +104,7 @@ def test_simulated_bad_query_raises_instrument_error_chained_from_timeout(simula
     assert simulation.idn
 
 
-def test_initialization_fault_closes_resource_before_publishing_connection(
+def test_initialization_fault_closes_resource_and_clears_connection(
     connect, driver, resource, query_replies
 ):
     query_replies["*ESR?"] = "32"
@@ -200,14 +202,14 @@ def test_binary_diagnostics_wait_for_complete_read_and_restored_framing(
     mock_instrument, resource
 ):
     resource.read_termination = "\r"
-    resource.end_input = pyvisa.constants.SerialTermination.termination_char
+    resource.end_input = SerialTermination.termination_char
     raw = struct.pack("<f", 1.25)
     resource.read_bytes.return_value = raw
 
     def diagnostic(command):
         resource.read_bytes.assert_called_once_with(4, break_on_termchar=False)
         assert resource.read_termination == "\r"
-        assert resource.end_input == pyvisa.constants.SerialTermination.termination_char
+        assert resource.end_input == SerialTermination.termination_char
         return "128" if command == "ERRS?" else "0"
 
     resource.query.side_effect = diagnostic
@@ -270,22 +272,81 @@ def test_buffer_timeout_recovers_before_reading_error_registers(
     assert gpib_resource.timeout == 5000
 
 
-def test_fault_in_trace_prevents_requested_loop_resume(simulation):
+def test_fault_in_trace_prevents_requested_loop_resume(simulation, simulation_clock):
     simulation.sample_rate = settings.SampleRate.Hz_1
     simulation.end_of_buffer_mode = settings.EndOfBufferMode.LOOP
     simulation.start()
-    simulation.advance_time(1)
+    simulation_clock.advance(1)
     simulation.inject_status("lia_status", settings.LiaStatusFlag.INPUT_OVERLOAD)
     with pytest.raises(InstrumentError, match="Input or amplifier overload"):
         simulation.get_ascii_buffer_data(1, 0, 1, resume=True)
     points = simulation.buffer_size
-    simulation.advance_time(2)
+    simulation_clock.advance(2)
     assert simulation.buffer_size == points
 
 
-def test_simulated_queued_query_honors_timeout(simulation):
-    simulation._raw_write("APHS")
-    with simulation._io_timeout(0.01):
-        with pytest.raises(pyvisa.errors.VisaIOError):
-            simulation.idn
-    assert simulation.idn  # Recovery waited for the queued command to complete.
+@pytest.mark.parametrize(
+    "attribute,command,reply,expected",
+    [
+        (
+            "standard_event_status",
+            "*ESR?",
+            "32",
+            settings.StandardEventFlag.COMMAND_ERROR,
+        ),
+        ("error_status", "ERRS?", "128", settings.ErrorFlag.MATH_ERROR),
+        ("lia_status", "LIAS?", "8", settings.LiaStatusFlag.REFERENCE_UNLOCK),
+    ],
+)
+def test_status_properties_return_flags_without_automatic_checks(
+    mock_instrument, resource, attribute, command, reply, expected
+):
+    resource.query.return_value = reply
+    result = getattr(mock_instrument, attribute)
+    assert result == expected
+    assert type(result) is type(expected)
+    resource.query.assert_called_once_with(command)
+    resource.write.assert_not_called()
+
+
+def test_simulated_status_properties_clear_only_the_selected_register(simulation):
+    simulation.inject_status("standard_event", settings.StandardEventFlag.COMMAND_ERROR)
+    simulation.inject_status("error", settings.ErrorFlag.MATH_ERROR)
+    simulation.inject_status("lia_status", settings.LiaStatusFlag.REFERENCE_UNLOCK)
+    assert simulation.standard_event_status == settings.StandardEventFlag.COMMAND_ERROR
+    assert simulation.standard_event_status == 0
+    assert simulation.error_status == settings.ErrorFlag.MATH_ERROR
+    assert simulation.error_status == 0
+    assert simulation.lia_status == settings.LiaStatusFlag.REFERENCE_UNLOCK
+    assert simulation.lia_status == 0
+
+
+@pytest.mark.parametrize("reply", ["-1", "256"])
+def test_status_query_rejects_out_of_range_register_response(
+    mock_instrument, resource, reply
+):
+    resource.query.return_value = reply
+    with pytest.raises(OSError, match="Invalid status register response"):
+        mock_instrument.error_status
+
+
+def test_initialization_query_failure_clears_connection_before_cleanup(
+    connect, driver, resource
+):
+    failure = timeout_error()
+
+    def query(command):
+        assert driver._instr is resource
+        raise failure
+
+    def close():
+        assert driver._instr is None
+        raise OSError("close failed")
+
+    resource.query.side_effect = query
+    resource.close.side_effect = close
+    with pytest.raises(pyvisa.errors.VisaIOError) as caught:
+        connect()
+    assert caught.value is failure
+    assert driver._instr is None
+    resource.close.assert_called_once()

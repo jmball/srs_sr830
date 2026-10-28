@@ -1,5 +1,6 @@
 """Enum-specific API behavior: serialization, cross-package inputs, and type safety."""
 
+from enum import IntEnum
 from unittest.mock import patch
 
 import pytest
@@ -29,6 +30,23 @@ def test_snap_serializes_codes_independently_of_enum_string_format(
         )
         assert tuple(values) == (0.003, 1000.0)
     resource.query.assert_any_call("SNAP? 1,9")
+
+
+def test_simulated_replies_serialize_scalar_and_composite_enums(
+    simulation, monkeypatch
+):
+    # Model the enum-name formatting used by Python 3.10. Protocol replies must
+    # remain numeric for default enums and for plain codes parsed from writes.
+    monkeypatch.setattr(IntEnum, "__str__", lambda member: member.name)
+    assert simulation._raw_query("FMOD?") == "1"
+    assert simulation._raw_query("DDEF? 1") == "0,0"
+    assert simulation._raw_query("FPOP? 2") == "1"
+    assert simulation._raw_query("OEXP? 1") == "0.0,0"
+    assert simulation._raw_query("FREQ?") == "1000.0"
+    simulation.input_coupling = settings.InputCoupling.DC
+    assert simulation._raw_query("ICPL?") == "1"
+    simulation.auto_reserve()
+    assert simulation._raw_query("RMOD?") == "2"
 
 
 @pytest.mark.parametrize(

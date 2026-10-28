@@ -2,8 +2,7 @@
 
 import argparse
 import math
-
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -65,12 +64,13 @@ class InstrumentOptions:
 
 
 @contextmanager
-def open_instrument(options: InstrumentOptions) -> Iterator[SR830 | VirtualSR830]:
+def open_instrument(
+    options: InstrumentOptions,
+) -> Generator[SR830 | VirtualSR830, None, None]:
     """Use a virtual instrument by default; a requested VISA failure stays a failure."""
     if options.resource_name is None:
         with VirtualSR830() as virtual:
             virtual.connect(
-                "ASRL1::INSTR",
                 output_interface=options.output_interface,
                 **options.resource_kwargs(),
             )
@@ -98,7 +98,7 @@ def open_instrument(options: InstrumentOptions) -> Iterator[SR830 | VirtualSR830
 
 
 @contextmanager
-def preserve_settings(instrument: object, *names: str) -> Iterator[None]:
+def preserve_settings(instrument: object, *names: str) -> Generator[None, None, None]:
     """Restore each changed property even after assertions or other cleanup fail."""
     with ExitStack() as cleanup:
         for name in names:
