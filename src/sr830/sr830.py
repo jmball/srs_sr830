@@ -558,6 +558,17 @@ class SR830:
             )
 
     @property
+    def harmonic_limits(self) -> tuple[int, int]:
+        """Supported harmonic bounds (1, 19999), available without connection.
+
+        The actual harmonic also requires reference frequency times harmonic
+        to be at most 102 kHz. HARM requests exceeding this limit are clamped
+        by the instrument; read harmonic back to obtain the selected value.
+        See the programming manual, section 5-4.
+        """
+        return (1, 19999)
+
+    @property
     def harmonic(self) -> int:
         """Get detection harmonic.
 
@@ -576,9 +587,11 @@ class SR830:
         ----------
         harmonic : int
             Detection harmonic, 1 =< harmonic =< 19999.
+            The instrument clamps this so reference frequency times harmonic
+            does not exceed 102 kHz; see harmonic_limits.
         """
         _require_integer(harmonic, "harmonic")
-        if (harmonic >= 1) and (harmonic <= 19999):
+        if self.harmonic_limits[0] <= harmonic <= self.harmonic_limits[1]:
             self._write(f"HARM {harmonic}")
         else:
             raise ValueError(
@@ -1015,9 +1028,10 @@ class SR830:
 
     @property
     def sync_filter_status(self) -> int:
-        """Get synchronous filter status.
+        """Get the synchronous filter selection, not its actual activity.
 
         Returns an integer code; use SynchronousFilter(code) for its named setting.
+        Use synchronous_filter_active to resolve activity where determinable.
 
         Returns
         -------
@@ -1049,6 +1063,42 @@ class SR830:
                 f"Invalid synchronous filter status: {status}. Must be 0 (off) or 1 "
                 + "(below 200 Hz)."
             )
+
+    @staticmethod
+    def _resolve_synchronous_filter_activity(
+        enabled: bool,
+        detection_frequency: float,
+        previous: bool | None = None,
+    ) -> bool | None:
+        """Apply the manual's 4-10 hysteresis rules to a known or unknown history."""
+        if not enabled:
+            return False
+        if not math.isfinite(detection_frequency) or detection_frequency <= 0:
+            return None
+        if detection_frequency < 199.21:
+            return True
+        if detection_frequency > 203.12:
+            return False
+        return previous
+
+    @property
+    def synchronous_filter_active(self) -> bool | None:
+        """Resolve synchronous filtering activity, or None when unknowable.
+
+        SYNC? reports the selection only. When enabled, the filter turns on
+        below 199.21 Hz and off above 203.12 Hz of detection frequency
+        (reference frequency times harmonic), per manual section 4-10.
+        Within the inclusive hysteresis band the hardware history is unknown,
+        even after previous reads: unobserved excursions may have occurred.
+        A nonpositive or nonfinite frequency also gives None. Disabled filtering
+        always gives False. Queries are sequential, not an atomic snapshot;
+        settings and reference frequency must be stable while reading.
+        """
+        if self.sync_filter_status == SynchronousFilter.OFF:
+            return False
+        return self._resolve_synchronous_filter_activity(
+            True, self.reference_frequency * self.harmonic
+        )
 
     # --- Display and output commands ---
 
@@ -1564,11 +1614,29 @@ class SR830:
 
     # --- Auto functions ---
 
+    @property
+    def auto_gain_available(self) -> bool:
+        """Whether native auto gain permits the current time constant (<= 1 s).
+
+        This queries the actual time constant, including instrument adjustments.
+        It reports eligibility, not completion or successful selection of a gain.
+        See the programming manual, section 5-11.
+        """
+        return TimeConstant(self.time_constant).seconds <= 1.0
+
     def auto_gain(self) -> None:
         """Automatically set the gain.
 
-        Does nothing if the time constant is greater than 1 second.
+        Raises
+        ------
+        RuntimeError
+            If the time constant exceeds one second, for which native AGAN
+            silently does nothing. Settings must remain stable during this call.
         """
+        if not self.auto_gain_available:
+            raise RuntimeError(
+                "Auto gain requires a time constant of 1 second or less."
+            )
         self._write("AGAN")
 
     def auto_reserve(self) -> None:
@@ -1889,6 +1957,11 @@ class SR830:
             )
 
     @property
+    def buffer_capacity(self) -> int:
+        """Native capacity per channel: 16,383 samples, without requiring connection."""
+        return 16383
+
+    @property
     def buffer_size(self) -> int:
         """Get the number of points stored in the buffer.
 
@@ -1910,7 +1983,7 @@ class SR830:
             channel not in (1, 2)
             or start_bin < 0
             or bins < 1
-            or start_bin + bins > 16383
+            or start_bin + bins > self.buffer_capacity
         ):
             raise ValueError(
                 "Invalid channel or buffer range (capacity is 16383 points)."

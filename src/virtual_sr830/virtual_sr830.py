@@ -336,6 +336,19 @@ class VirtualSR830(SR830):
 
     # --- Instrument settings and status overrides ---
 
+    @property
+    def synchronous_filter_active(self) -> bool | None:
+        """Filter activity from the simulated frequency history.
+
+        Uses the hardware driver's thresholds and hysteresis rules. Unlike
+        hardware, simulated history is fully controlled; the state remains known
+        within the hysteresis band unless the reference frequency is unavailable.
+        This reports selection activity; the model does not simulate the
+        synchronous filter's period averaging or its transients.
+        """
+        self._query("SYNC?")
+        return self._synchronous_filter_active
+
     @SR830.output_interface.setter
     def output_interface(self, interface: OutputInterface | int) -> None:
         """Select a valid response interface; reject changes during FAST."""
@@ -771,7 +784,11 @@ class VirtualSR830(SR830):
         ]
         self._front_outputs: list[int] = [FrontPanelOutputSource.COMPONENT] * 2
         self._offsets: list[tuple[float, int]] = [(0.0, OutputExpansion.x1)] * 3
-        self._buffers: list[deque[float]] = [deque(maxlen=16383), deque(maxlen=16383)]
+        self._synchronous_filter_active: bool | None = False
+        self._buffers: list[deque[float]] = [
+            deque(maxlen=self.buffer_capacity),
+            deque(maxlen=self.buffer_capacity),
+        ]
         self._fast_queue: deque[tuple[int, int]] = deque()
         self._running = False
         self._scan_started = False
@@ -842,6 +859,11 @@ class VirtualSR830(SR830):
         output overload when the filtered magnitude exceeds full scale.
         """
         now = time.monotonic()
+        self._synchronous_filter_active = self._resolve_synchronous_filter_activity(
+            bool(self._settings["SYNC"]),
+            self._reference_frequency() * self._settings["HARM"],
+            self._synchronous_filter_active,
+        )
         if self._running and self._settings["SRAT"] != SampleRate.TRIGGER:
             rate = SampleRate(int(self._settings["SRAT"])).hertz
             assert rate is not None
@@ -849,10 +871,10 @@ class VirtualSR830(SR830):
             # Avoid unbounded work after a long real-world idle period. Retain the
             # same latest samples that fit in the physical instrument's buffer.
             if self._settings["SEND"] == EndOfBufferMode.ONE_SHOT:
-                count = min(count, 16383 - len(self._buffers[0]))
-            elif count > 16383:
-                self._last_sample += (count - 16383) / rate
-                count = 16383
+                count = min(count, self.buffer_capacity - len(self._buffers[0]))
+            elif count > self.buffer_capacity:
+                self._last_sample += (count - self.buffer_capacity) / rate
+                count = self.buffer_capacity
             for _ in range(count):
                 self._last_sample += 1 / rate
                 self._store_sample(self._last_sample)
@@ -897,7 +919,7 @@ class VirtualSR830(SR830):
             self._registers["lia_status"] |= int(LiaStatusFlag.OUTPUT_OVERLOAD)
         if (
             self._settings["SEND"] == EndOfBufferMode.ONE_SHOT
-            and len(self._buffers[0]) == 16383
+            and len(self._buffers[0]) == self.buffer_capacity
         ):
             self._running = False
             self._scan_started = False

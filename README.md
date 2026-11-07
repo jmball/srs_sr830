@@ -273,6 +273,27 @@ Setters accept enum members or integer command codes, not physical values.
 See the [SR830 programming manual](https://www.thinksrs.com/downloads/pdfs/manuals/SR830m.pdf)
 for instrument codes and units.
 
+Both drivers expose read-only native limits without requiring a connection:
+`buffer_capacity` is 16,383 samples per channel and `harmonic_limits` is
+`(1, 19999)`. The harmonic also depends on reference frequency: their product
+must not exceed 102 kHz. The instrument clamps an excessive harmonic request;
+read `harmonic` back to obtain the selected value (manual section 5-4).
+
+`auto_gain_available` queries whether the current time constant is at most one
+second. `auto_gain()` raises `RuntimeError` above that limit instead of issuing
+an AGAN command that would silently do nothing (manual section 5-11).
+Availability means the operation is permitted, not that it has completed or
+will find a suitable sensitivity. Keep settings stable during the check/call.
+
+`sync_filter_status` reports the selected mode; `synchronous_filter_active`
+reports activity as `True`, `False`, or `None`. When enabled, filtering turns on
+below 199.21 Hz and off above 203.12 Hz of detection frequency (reference
+frequency times harmonic), as documented in manual section 4-10. Hardware
+reads within the inclusive hysteresis band return `None`: the protocol cannot
+reveal the intervening frequency history. An unavailable/invalid frequency also
+returns `None`. Disabled filtering returns `False`. These are sequential queries,
+so keep settings and reference frequency stable while reading.
+
 ## Acquisition and completion
 
 Buffer readers validate the range against the 16383-point capacity and the
@@ -401,6 +422,12 @@ FAST reads wait for samples and enforce their timeout budgets. Auto-phase,
 auto-gain, auto-reserve, and auto-offset complete immediately. There is no public
 clock, time-advance method, or signal callback. Tests patch internal time sources
 to exercise the same calculations without waiting in real time.
+
+The simulator tracks synchronous-filter activity using the hardware driver's
+thresholds and its controlled frequency history, so `synchronous_filter_active`
+can retain a known state within the hysteresis band. Losing the external
+reference makes that history uncertain until a threshold establishes it again.
+This tracks activity only; synchronous period averaging is not simulated.
 
 Signal amplitudes are in V for voltage mode and A for current mode, before
 offset and expansion. Changing input configuration does not rescale the input. `set_aux_input(channel, voltage)` and

@@ -214,7 +214,9 @@ def test_auto_settings_take_effect_without_elapsed_time(simulation, simulation_c
 def test_auto_gain_obeys_long_time_constant_constraint(simulation):
     simulation.time_constant = TimeConstant.s_3
     before = simulation.sensitivity
-    simulation.auto_gain()
+    assert simulation.auto_gain_available is False
+    with pytest.raises(RuntimeError, match="1 second or less"):
+        simulation.auto_gain()
     assert simulation.sensitivity == before
 
 

@@ -68,6 +68,8 @@ The hardware class is `sr830.SR830`; the virtual class is
   Sensitivity multipliers select RMS full-scale amplitudes in V for voltage
   inputs or microamps for current inputs; they do not represent amplifier gain.
   OutputExpansion.x1 has code 0 and represents no expansion (unity gain).
+  Numeric enum properties expose seconds, hertz, decibels_per_octave, or
+  multiplier; .value remains the protocol code.
 - Follow the existing four-space indentation, snake_case methods and properties,
   and NumPy-style docstrings describing parameters, ranges, and units.
 - The hardware VISA resource is private (`self._instr`). Driver I/O uses
@@ -169,6 +171,13 @@ the hardware driver's context manager calls `disconnect()` on exit.
 
 - Integer protocol fields reject floats (including 1.0) and bools before I/O.
   Native serial connections require 8 data bits for all commands.
+- Read-only buffer_capacity and harmonic_limits are available disconnected.
+  auto_gain_available queries the actual time constant; auto_gain rejects values
+  above one second. Synchronous-filter activity uses shared driver thresholds
+  (on below 199.21 Hz, off above 203.12 Hz of reference frequency times harmonic).
+  Hardware activity is unknown within the hysteresis band; never assume cached
+  reads exclude unobserved excursions. Virtual activity tracks controlled history
+  but does not model synchronous averaging or transients.
 - Trace readers validate capacity and acquired length, reject short responses,
   and pause loop scans. They leave loop scans paused unless resume=True explicitly
   requests start() after success. Failures leave the scan paused.
