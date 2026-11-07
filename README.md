@@ -138,6 +138,19 @@ return integer codes; construct the enum from a getter when a named result is
 wanted. Enum inputs must belong to the setting being used; an unrelated enum is
 rejected even when its number is in range.
 
+Numeric settings expose read-only properties with explicit units or meanings.
+Their standard enum `.value` remains the instrument command code:
+
+```python
+TimeConstant.us_100.seconds  # 100e-6
+TimeConstant.us_100.value  # 2
+TimeConstant(instrument.time_constant).seconds  # Convert a getter result.
+SampleRate.Hz_16.hertz  # 16.0; SampleRate.TRIGGER.hertz is None.
+LowPassFilterSlope.dB_12.decibels_per_octave  # 12
+OutputExpansion.x10.multiplier  # 10
+Sensitivity.x1u.multiplier  # 1e-6, applied to V or microamps, not gain.
+```
+
 ```python
 from sr830 import (
     LowPassFilterSlope,

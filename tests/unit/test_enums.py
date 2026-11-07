@@ -9,6 +9,43 @@ from sr830 import settings
 from virtual_sr830 import Sensitivity
 
 
+@pytest.mark.parametrize(
+    "member,seconds",
+    [
+        (settings.TimeConstant.us_100, 100e-6),
+        (settings.TimeConstant.ms_30, 0.03),
+        (settings.TimeConstant.s_3, 3.0),
+        (settings.TimeConstant.ks_30, 30000.0),
+    ],
+)
+def test_time_constant_seconds(member, seconds):
+    assert member.seconds == pytest.approx(seconds)
+
+
+def test_numeric_setting_properties_preserve_command_codes():
+    assert settings.TimeConstant(2).seconds == pytest.approx(100e-6)
+    assert settings.TimeConstant.us_100.value == 2
+    assert settings.SampleRate.mHz_62_5.hertz == 0.0625
+    assert settings.SampleRate.Hz_512.hertz == 512.0
+    assert settings.SampleRate.TRIGGER.hertz is None
+    assert settings.LowPassFilterSlope.dB_12.decibels_per_octave == 12
+    assert settings.OutputExpansion.x1.multiplier == 1
+    assert settings.OutputExpansion.x100.multiplier == 100
+
+
+@pytest.mark.parametrize(
+    "member,multiplier",
+    [
+        (settings.Sensitivity.x2n, 2e-9),
+        (settings.Sensitivity.x1u, 1e-6),
+        (settings.Sensitivity.x500m, 0.5),
+        (settings.Sensitivity.x1, 1.0),
+    ],
+)
+def test_sensitivity_full_scale_multiplier(member, multiplier):
+    assert member.multiplier == pytest.approx(multiplier)
+
+
 def test_virtual_package_enum_is_accepted_by_hardware_driver(mock_instrument, resource):
     mock_instrument.sensitivity = Sensitivity.x1u
     resource.write.assert_called_once_with("SENS 8")

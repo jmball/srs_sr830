@@ -63,7 +63,6 @@ from .settings import (
     TimeConstant,
     TriggerStartMode,
     _require_integer,
-    _time_constant_seconds,
     _validate_enum,
     _validate_register_bit,
     _validate_register_value,
@@ -2512,7 +2511,7 @@ class SR830:
             }[LowPassFilterSlope(self.lowpass_filter_slope)]
         elif not math.isfinite(time_constants) or time_constants <= 0:
             raise ValueError("time_constants must be finite and positive.")
-        delay = time_constants * _time_constant_seconds(self.time_constant)
+        delay = time_constants * TimeConstant(self.time_constant).seconds
         if not math.isfinite(delay):
             raise ValueError("Calculated settling delay must be finite.")
         time.sleep(delay)

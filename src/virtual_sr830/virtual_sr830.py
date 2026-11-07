@@ -59,7 +59,6 @@ from sr830.settings import (
     TimeConstant,
     TriggerStartMode,
     _full_scale,
-    _time_constant_seconds,
     _validate_enum,
     _validate_register_value,
 )
@@ -465,8 +464,7 @@ class VirtualSR830(SR830):
                     cmath.phase(value)
                 )
             elif (
-                key == "AGAN"
-                and _time_constant_seconds(int(self._settings["OFLT"])) <= 1
+                key == "AGAN" and TimeConstant(int(self._settings["OFLT"])).seconds <= 1
             ):
                 amplitude = abs(value)
                 code = next(
@@ -707,7 +705,8 @@ class VirtualSR830(SR830):
             if not self._running or self._settings["SRAT"] == SampleRate.TRIGGER:
                 delay = 0.01
             else:
-                rate = 0.0625 * 2 ** int(self._settings["SRAT"])
+                rate = SampleRate(int(self._settings["SRAT"])).hertz
+                assert rate is not None
                 delay = max(1e-9, self._last_sample + 1 / rate - now)
             time.sleep(min(delay, remaining))
         return bytes(result)
@@ -817,7 +816,7 @@ class VirtualSR830(SR830):
         mutate the filter history; elapsed time is never negative.
         """
         dt = max(0.0, when - self._filter_time)
-        tau = _time_constant_seconds(int(self._settings["OFLT"]))
+        tau = TimeConstant(int(self._settings["OFLT"])).seconds
         ratio = dt / tau
         target = self._input_target()
         if ratio > 100:
@@ -844,7 +843,8 @@ class VirtualSR830(SR830):
         """
         now = time.monotonic()
         if self._running and self._settings["SRAT"] != SampleRate.TRIGGER:
-            rate = 0.0625 * 2 ** int(self._settings["SRAT"])
+            rate = SampleRate(int(self._settings["SRAT"])).hertz
+            assert rate is not None
             count = max(0, int((now - self._last_sample) * rate + 1e-9))
             # Avoid unbounded work after a long real-world idle period. Retain the
             # same latest samples that fit in the physical instrument's buffer.
@@ -878,7 +878,9 @@ class VirtualSR830(SR830):
                 (value.real, value.imag), self._offsets[:2]
             ):
                 count = round(
-                    (raw / full_scale - offset / 100) * (1, 10, 100)[expand] * 30000
+                    (raw / full_scale - offset / 100)
+                    * OutputExpansion(expand).multiplier
+                    * 30000
                 )
                 counts.append(max(-32768, min(32767, count)))
             # FAST2 has a 63-pair output queue. Model an aborted transfer rather
@@ -975,10 +977,10 @@ class VirtualSR830(SR830):
             scale = self._full_scale()
             expand = 1
             if display in (Channel1Display.X, Channel2Display.Y):
-                expand = (1, 10, 100)[self._offsets[channel - 1][1]]
+                expand = OutputExpansion(self._offsets[channel - 1][1]).multiplier
             elif display in (Channel1Display.R, Channel2Display.PHASE):
                 if channel == Channel.CH1:
-                    expand = (1, 10, 100)[self._offsets[2][1]]
+                    expand = OutputExpansion(self._offsets[2][1]).multiplier
                 else:
                     scale = 180.0
             elif display >= Channel1Display.AUX_IN_1:

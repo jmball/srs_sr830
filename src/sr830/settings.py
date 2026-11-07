@@ -1,6 +1,8 @@
 """SR830 setting enums and internal protocol helpers.
 
 Integer enum values are instrument command codes, not physical values.
+Numeric settings expose physical values through named, read-only properties;
+``.value`` remains the instrument command code.
 Unit-valued settings use <unit>_<value>; multiplier settings use x<value>.
 SI prefixes in numbers use n (nano), u (micro), and m (milli).
 """
@@ -230,6 +232,18 @@ class Sensitivity(IntEnum):
     x500m = 25
     x1 = 26
 
+    @property
+    def multiplier(self) -> float:
+        """RMS full-scale multiplier of V (voltage) or microamps (current).
+
+        This is not amplifier gain. For example, x1u has multiplier 1e-6,
+        selecting 1 microvolt in voltage mode or 1 picoamp in current mode.
+        """
+        text = self.name[1:]
+        suffix = text[-1] if text[-1].isalpha() else ""
+        number = float(text[:-1] if suffix else text)
+        return number * {"": 1.0, "n": 1e-9, "u": 1e-6, "m": 1e-3}[suffix]
+
 
 class TimeConstant(IntEnum):
     """Time-constant codes (OFLT), named <unit>_<value>.
@@ -261,6 +275,12 @@ class TimeConstant(IntEnum):
     ks_10 = 18
     ks_30 = 19
 
+    @property
+    def seconds(self) -> float:
+        """Time constant in seconds; for example, us_100 gives 100e-6."""
+        unit, number = self.name.split("_")
+        return int(number) * {"us": 1e-6, "ms": 1e-3, "s": 1.0, "ks": 1e3}[unit]
+
 
 class LowPassFilterSlope(IntEnum):
     """Filter-slope codes (OFSL), named dB_<value>.
@@ -274,6 +294,11 @@ class LowPassFilterSlope(IntEnum):
     dB_18 = 2
     dB_24 = 3
 
+    @property
+    def decibels_per_octave(self) -> int:
+        """Low-pass filter roll-off in decibels per octave."""
+        return 6 * (self.value + 1)
+
 
 class OutputExpansion(IntEnum):
     """Output-expansion codes (OEXP), named x<value>.
@@ -285,6 +310,11 @@ class OutputExpansion(IntEnum):
     x1 = 0
     x10 = 1
     x100 = 2
+
+    @property
+    def multiplier(self) -> int:
+        """Output expansion factor; x1 gives unity (no expansion)."""
+        return 10**self.value
 
 
 class SampleRate(IntEnum):
@@ -310,6 +340,11 @@ class SampleRate(IntEnum):
     Hz_256 = 12
     Hz_512 = 13
     TRIGGER = 14
+
+    @property
+    def hertz(self) -> float | None:
+        """Periodic sample rate in Hz, or None for trigger-driven sampling."""
+        return None if self is SampleRate.TRIGGER else 0.0625 * 2**self.value
 
 
 class Channel(IntEnum):
@@ -580,19 +615,6 @@ def _require_integer(value: object, name: str) -> None:
         raise ValueError(f"{name} must be an integer.")
 
 
-def _time_constant_seconds(code: int) -> float:
-    """Convert the documented unit/value name for timing calculations."""
-    unit, number = TimeConstant(code).name.split("_")
-    return int(number) * {"us": 1e-6, "ms": 1e-3, "s": 1.0, "ks": 1e3}[unit]
-
-
 def _full_scale(code: int, input_configuration: int) -> float:
     """Full-scale amplitude in V or A, from the sensitivity multiplier name."""
-    text = Sensitivity(code).name[1:]
-    suffix = text[-1] if text[-1].isalpha() else ""
-    number = float(text[:-1] if suffix else text)
-    return (
-        number
-        * {"": 1.0, "n": 1e-9, "u": 1e-6, "m": 1e-3}[suffix]
-        * (1e-6 if input_configuration >= 2 else 1.0)
-    )
+    return Sensitivity(code).multiplier * (1e-6 if input_configuration >= 2 else 1.0)
